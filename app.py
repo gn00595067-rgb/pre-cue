@@ -4,7 +4,7 @@ import traceback
 # =========================================================
 # 1. 頁面設定 (必須是程式的第一個有效指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v100.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v101.0")
 
 import pandas as pd
 import math
@@ -493,13 +493,16 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     eff_days = days_cnt
     header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
     if format_type == "Bolin": header_cls = "bg-bolin-head"
+
     date_th1 = ""; date_th2 = ""; curr = start_dt; weekdays = ["一", "二", "三", "四", "五", "六", "日"]
     for i in range(eff_days):
         wd = curr.weekday(); bg = "bg-weekend" if wd >= 5 else ""
         date_th1 += f"<th class='{header_cls} col_day'>{curr.day}</th>"; date_th2 += f"<th class='{bg} col_day'>{weekdays[wd]}</th>"; curr += timedelta(days=1)
+
     cols_def = ["Station", "Location", "Program", "Day-part", "Size", "rate<br>(Net)", "Package-cost<br>(Net)"]
     if format_type == "Shenghuo": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "秒數/規格", "單價", "金額"]
     elif format_type == "Bolin": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "規格", "單價", "金額"]
+
     th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
     
     unique_media = sorted(list(set([r['media'] for r in rows]))); medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
@@ -526,10 +529,17 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     return f"<html><head><style>body {{ font-family: sans-serif; font-size: 10px; }} table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }} .bg-dw-head {{ background-color: #4472C4; color: white; }} .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }} .bg-bolin-head {{ background-color: #F8CBAD; color: black; }} .bg-weekend {{ background-color: #FFFFCC; }}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
 
 # =========================================================
-# 9. Main Execution Block
+# 10. Main Execution Block
 # =========================================================
 def main():
     try:
+        # [FIX] Initialize Session State INSIDE main to prevent scope issues
+        if "is_supervisor" not in st.session_state:
+            st.session_state.is_supervisor = False
+        if "rad_share" not in st.session_state: st.session_state.rad_share = 100
+        if "fv_share" not in st.session_state: st.session_state.fv_share = 0
+        if "cf_share" not in st.session_state: st.session_state.cf_share = 0
+
         # Load Data
         STORE_COUNTS, STORE_COUNTS_NUM, PRICING_DB, SEC_FACTORS, err_msg = load_config_from_cloud(GSHEET_SHARE_URL)
         if err_msg:
@@ -549,7 +559,7 @@ def main():
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
         # Main UI
-        st.title("📺 媒體 Cue 表生成器 (v100.0)")
+        st.title("📺 媒體 Cue 表生成器 (v101.0)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
@@ -581,13 +591,45 @@ def main():
             billing_month = rc2.text_input("請款月份", "2026年2月")
             payment_date = rc3.date_input("付款兌現日", datetime(2026, 3, 31))
 
-        # Media Selection UI (Defines is_rad, is_fv...)
+        # Media Selection UI (Now safely inside main)
         st.markdown("### 3. 媒體投放設定")
         col_cb1, col_cb2, col_cb3 = st.columns(3)
-        # Using session state to persist choices if needed, but simple checkbox is fine here
-        is_rad = col_cb1.checkbox("全家廣播", value=True, key="cb_rad")
-        is_fv = col_cb2.checkbox("新鮮視", value=False, key="cb_fv")
-        is_cf = col_cb3.checkbox("家樂福", value=False, key="cb_cf")
+        
+        def on_media_change():
+            active = []
+            if st.session_state.get("cb_rad"): active.append("rad_share")
+            if st.session_state.get("cb_fv"): active.append("fv_share")
+            if st.session_state.get("cb_cf"): active.append("cf_share")
+            if not active: return
+            share = 100 // len(active)
+            for key in active: st.session_state[key] = share
+            rem = 100 - sum([st.session_state[k] for k in active])
+            st.session_state[active[0]] += rem
+
+        def on_slider_change(changed_key):
+            active = []
+            if st.session_state.get("cb_rad"): active.append("rad_share")
+            if st.session_state.get("cb_fv"): active.append("fv_share")
+            if st.session_state.get("cb_cf"): active.append("cf_share")
+            others = [k for k in active if k != changed_key]
+            if not others: st.session_state[changed_key] = 100
+            elif len(others) == 1:
+                val = st.session_state[changed_key]
+                st.session_state[others[0]] = max(0, 100 - val)
+            elif len(others) == 2:
+                val = st.session_state[changed_key]
+                rem = max(0, 100 - val)
+                k1, k2 = others[0], others[1]
+                sum_others = st.session_state[k1] + st.session_state[k2]
+                if sum_others == 0: st.session_state[k1] = rem // 2; st.session_state[k2] = rem - st.session_state[k1]
+                else:
+                    ratio = st.session_state[k1] / sum_others
+                    st.session_state[k1] = int(rem * ratio)
+                    st.session_state[k2] = rem - st.session_state[k1]
+
+        is_rad = col_cb1.checkbox("全家廣播", value=True, key="cb_rad", on_change=on_media_change)
+        is_fv = col_cb2.checkbox("新鮮視", value=False, key="cb_fv", on_change=on_media_change)
+        is_cf = col_cb3.checkbox("家樂福", value=False, key="cb_cf", on_change=on_media_change)
 
         m1, m2, m3 = st.columns(3)
         config = {}
@@ -599,7 +641,7 @@ def main():
                 regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=REGIONS_ORDER, key="rad_reg")
                 if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
                 secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
-                st.slider("預算 %", 0, 100, 100, key="rad_share") # Simple slider for now
+                st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
                 sec_shares = {}
                 if len(secs) > 1:
                     rem = 100; sorted_secs = sorted(secs)
@@ -607,7 +649,7 @@ def main():
                         if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}"); sec_shares[s] = v; rem -= v
                         else: sec_shares[s] = rem
                 elif secs: sec_shares[secs[0]] = 100
-                config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.get("rad_share", 100)}
+                config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
 
         if is_fv:
             with m2:
@@ -616,7 +658,7 @@ def main():
                 regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=["北區"], key="fv_reg")
                 if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
                 secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
-                st.slider("預算 %", 0, 100, 0, key="fv_share")
+                st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
                 sec_shares = {}
                 if len(secs) > 1:
                     rem = 100; sorted_secs = sorted(secs)
@@ -624,13 +666,13 @@ def main():
                         if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}"); sec_shares[s] = v; rem -= v
                         else: sec_shares[s] = rem
                 elif secs: sec_shares[secs[0]] = 100
-                config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.get("fv_share", 0)}
+                config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
 
         if is_cf:
             with m3:
                 st.markdown("#### 🛒 家樂福")
                 secs = st.multiselect("秒數", DURATIONS, [20], key="cf_sec")
-                st.slider("預算 %", 0, 100, 0, key="cf_share")
+                st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
                 sec_shares = {}
                 if len(secs) > 1:
                     rem = 100; sorted_secs = sorted(secs)
@@ -638,9 +680,8 @@ def main():
                         if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"cs_{s}"); sec_shares[s] = v; rem -= v
                         else: sec_shares[s] = rem
                 elif secs: sec_shares[secs[0]] = 100
-                config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.get("cf_share", 0)}
+                config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
 
-        # Execute Logic
         if config:
             rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count, PRICING_DB, SEC_FACTORS, STORE_COUNTS_NUM, REGIONS_ORDER)
             prod_cost = prod_cost_input 
@@ -650,14 +691,12 @@ def main():
             rem = get_remarks_text(sign_deadline, billing_month, payment_date)
             html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
             st.components.v1.html(html_preview, height=700, scrolling=True)
-            
             with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
                 for log in logs:
                     st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
                     if 'Details' in log:
                         for detail in log['Details']: st.info(detail)
                     st.divider()
-            
             col_dl1, col_dl2 = st.columns(2)
             with col_dl2:
                 try:
