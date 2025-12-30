@@ -3,7 +3,7 @@ import streamlit as st
 # =========================================================
 # 1. 頁面設定 (必須是第一個 st 指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v95.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v96.0")
 
 import pandas as pd
 import math
@@ -431,7 +431,6 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
     ws['A3'] = "聲活數位科技股份有限公司 統編 28710100"; ws['A3'].font = Font(name=FONT_MAIN, size=20); ws['A3'].alignment = Alignment(vertical='center')
     ws['A4'] = "蔡伊閔"; ws['A4'].font = Font(name=FONT_MAIN, size=16); ws['A4'].alignment = Alignment(vertical='center')
 
-    # Row 5-6 (White, Top/Bottom Medium)
     for r in [5, 6]:
         for c in range(1, total_cols + 1):
             cell = ws.cell(r, c)
@@ -480,7 +479,6 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         cell8.font = Font(name=FONT_MAIN, size=14, bold=True); cell8.alignment = Alignment(horizontal='center', vertical='center')
         set_border(cell8, top=BS_HAIR, bottom=BS_HAIR, left=BS_HAIR, right=BS_HAIR)
         
-        # Weekend Color Row 8 Only
         if curr.weekday() >= 5:
             cell8.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
         
@@ -726,21 +724,87 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
     
     return curr_row
 
+def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "工作表1"
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1
+    
+    unique_secs = sorted(list(set([r['seconds'] for r in rows])))
+    product_display_str_dongwu = f"{'、'.join([f'{s}秒' for s in unique_secs])} {product_name}"
+    
+    if format_type == "Dongwu": curr_row = render_dongwu(ws, start_dt, end_dt, client_name, product_display_str_dongwu, rows, remarks_list, final_budget_val)
+    elif format_type == "Shenghuo": curr_row = render_shenghuo(ws, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost)
+    else: curr_row = render_bolin(ws, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost)
+
+    if format_type == "Dongwu":
+        curr_row += 1
+        vat = int(round(final_budget_val * 0.05)); grand_total = final_budget_val + vat
+        footer_data = [("製作", prod_cost), ("5% VAT", vat), ("Grand Total", grand_total)]
+        label_col = 6; val_col = 7
+        for label, val in footer_data:
+            ws.row_dimensions[curr_row].height = 30
+            ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center'); ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14)
+            ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = FMT_MONEY; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14)
+            set_border(ws.cell(curr_row, label_col), left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
+            set_border(ws.cell(curr_row, val_col), right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
+            if label == "Grand Total":
+                # Grand Total for Dongwu: No Color, Only Border
+                for c in range(1, 40): set_border(ws.cell(curr_row, c), top=BS_MEDIUM, bottom=BS_MEDIUM)
+            curr_row += 1
+        draw_outer_border(ws, 7, curr_row-1, 1, 39)
+
+    if format_type == "Dongwu":
+        curr_row += 1
+        ws.cell(curr_row, 1).value = "Remarks："
+        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
+        for c in range(1, 40): set_border(ws.cell(curr_row, c), top=None)
+        curr_row += 1
+        for rm in remarks_list:
+            ws.cell(curr_row, 1).value = rm
+            f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
+            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
+            curr_row += 1
+    elif format_type == "Shenghuo":
+        curr_row += 1
+        ws.cell(curr_row, 1).value = "Remarks："
+        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
+        curr_row += 1
+        for rm in remarks_list:
+            ws.cell(curr_row, 1).value = rm
+            f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
+            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
+            curr_row += 1
+    elif format_type == "Bolin":
+        curr_row += 1
+        ws.cell(curr_row, 9).value = "Remarks："
+        ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single")
+        curr_row += 1
+        for rm in remarks_list:
+            ws.cell(curr_row, 9).value = rm
+            ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True)
+            curr_row += 1
+
+    out = io.BytesIO(); wb.save(out); return out.getvalue()
+
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
-    # Re-implemented HTML Preview
+    # Re-implemented HTML Preview with Infinite Scroll & New Medium Logic
     eff_days = days_cnt
     header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
     if format_type == "Bolin": header_cls = "bg-bolin-head"
 
     date_th1 = ""; date_th2 = ""; curr = start_dt; weekdays = ["一", "二", "三", "四", "五", "六", "日"]
     for i in range(eff_days):
-        wd = curr.weekday(); bg = "bg-weekend" if (format_type == "Dongwu" and wd >= 5) else header_cls
-        if format_type in ["Shenghuo", "Bolin"]: bg = header_cls 
-        date_th1 += f"<th class='{bg} col_day'>{curr.day}</th>"; date_th2 += f"<th class='{bg} col_day'>{weekdays[wd]}</th>"; curr += timedelta(days=1)
+        wd = curr.weekday(); 
+        # Weekend color logic for Preview:
+        # Dongwu/Shenghuo/Bolin all color Row 8 (date_th2 here) if weekend
+        bg = "bg-weekend" if wd >= 5 else ""
+        date_th1 += f"<th class='{header_cls} col_day'>{curr.day}</th>"; date_th2 += f"<th class='{bg} col_day'>{weekdays[wd]}</th>"; curr += timedelta(days=1)
 
     cols_def = ["Station", "Location", "Program", "Day-part", "Size", "rate<br>(Net)", "Package-cost<br>(Net)"]
     th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
     
+    unique_media = sorted(list(set([r['media'] for r in rows])))
+    medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
+
     tbody = ""
     # Simplified rendering for preview to avoid complexity
     for r in rows:
@@ -748,15 +812,31 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
         tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{r['rate_display']}</td><td>{r['pkg_display']}</td>"
         for d in r['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
         tbody += "</tr>"
+        
+    # Remarks in HTML
+    remarks_html = "<br>".join([html_escape(x) for x in remarks])
 
     return f"""<html><head><style>
     body {{ font-family: sans-serif; font-size: 10px; }}
-    table {{ width: 100%; border-collapse: collapse; }}
+    table {{ border-collapse: collapse; }}
     th, td {{ border: 0.5pt solid #000; padding: 2px; text-align: center; white-space: nowrap; }}
     .bg-dw-head {{ background-color: #4472C4; color: white; }}
+    .bg-sh-head {{ background-color: white; color: black; }}
+    .bg-bolin-head {{ background-color: #F8CBAD; color: black; }}
+    .bg-weekend {{ background-color: #FFFFCC; }}
     </style></head><body>
+    <div style="margin-bottom:10px;">
+        <b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br>
+        <b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}
+    </div>
+    <div style="overflow-x:auto;">
     <table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead>
-    <tbody>{tbody}</tbody></table></body></html>"""
+    <tbody>{tbody}</tbody></table>
+    </div>
+    <div style="margin-top:10px; font-size:9px;">
+        <b>Remarks：</b><br>{remarks_html}
+    </div>
+    </body></html>"""
 
 with st.sidebar:
     st.header("🕵️ 主管登入")
