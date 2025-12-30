@@ -42,7 +42,7 @@ def html_escape(s):
 # =========================================================
 # 2. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v80.1")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v80.2")
 
 # =========================================================
 # 3. PDF 策略
@@ -121,6 +121,12 @@ def load_config_from_cloud(share_url):
         for _, row in df_fact.iterrows():
             if row['Media'] not in sec_factors: sec_factors[row['Media']] = {}
             sec_factors[row['Media']][int(row['Seconds'])] = float(row['Factor'])
+        
+        # [NEW] Name Mapping Fix
+        name_map = {"全家新鮮視": "新鮮視", "全家廣播": "全家廣播", "家樂福": "家樂福"}
+        for k, v in name_map.items():
+            if k in sec_factors and v not in sec_factors:
+                sec_factors[v] = sec_factors[k]
 
         df_price = read_sheet("Pricing")
         df_price.columns = [c.strip() for c in df_price.columns]
@@ -163,7 +169,28 @@ REGION_DISPLAY_MAP = {
 }
 def region_display(region): return REGION_DISPLAY_MAP.get(region, region)
 
-def get_sec_factor(media_type, seconds): return SEC_FACTORS.get(media_type, {}).get(seconds, 1.0)
+# [FIX] Enhanced Factor Retrieval with Interpolation
+def get_sec_factor(media_type, seconds):
+    factors = SEC_FACTORS.get(media_type)
+    
+    # Try alternate keys if not found
+    if not factors:
+        if media_type == "新鮮視": factors = SEC_FACTORS.get("全家新鮮視")
+        elif media_type == "全家廣播": factors = SEC_FACTORS.get("全家廣播") # Should exist
+    
+    if not factors: return 1.0
+    
+    # Exact Match
+    if seconds in factors: return factors[seconds]
+    
+    # Fallback: Proportional Calculation (Interpolation)
+    # Prefer base 10, then 20, then 15, then 30
+    for base in [10, 20, 15, 30]:
+        if base in factors:
+            estimated = (seconds / base) * factors[base]
+            return estimated
+            
+    return 1.0
 
 def calculate_schedule(total_spots, days):
     if days <= 0: return []
@@ -186,7 +213,7 @@ def get_remarks_text(sign_deadline, billing_month, payment_date):
     ]
 
 # =========================================================
-# 5. 核心計算函式 (Detailed Debug Version)
+# 5. 核心計算函式 (With Detailed Debug)
 # =========================================================
 def calculate_plan_data(config, total_budget, days_count):
     rows = []
@@ -244,7 +271,7 @@ def calculate_plan_data(config, total_budget, days_count):
                     
                     log_details.append(
                         f"**全省總價**: ${nat_pkg_display:,}\n"
-                        f"- 公式: (牌價${nat_list:,} / 標準{db['Std_Spots']}檔 * 秒數{factor} * 懲罰{total_display_penalty}) = 單價 ${nat_unit_price:,}\n"
+                        f"- 公式: (牌價${nat_list:,} / 標準{db['Std_Spots']}檔 * 秒數{factor:.2f} * 懲罰{total_display_penalty}) = 單價 ${nat_unit_price:,}\n"
                         f"- 計算: ${nat_unit_price:,} x {spots_final}檔"
                     )
 
@@ -257,7 +284,7 @@ def calculate_plan_data(config, total_budget, days_count):
                         total_list_accum += row_pkg_display
                         log_details.append(
                             f"**{r}**: ${total_rate_display:,}\n"
-                            f"- 公式: (牌價${list_price_region:,} / 標準{db['Std_Spots']}檔 * 秒數{factor} * 懲罰{row_display_penalty}) = 單價 ${unit_rate_display:,}\n"
+                            f"- 公式: (牌價${list_price_region:,} / 標準{db['Std_Spots']}檔 * 秒數{factor:.2f} * 懲罰{row_display_penalty}) = 單價 ${unit_rate_display:,}\n"
                             f"- 計算: ${unit_rate_display:,} x {spots_final}檔"
                         )
 
@@ -299,7 +326,7 @@ def calculate_plan_data(config, total_budget, days_count):
                 
                 log_details = [
                     f"**量販總價**: ${total_rate_h:,}\n"
-                    f"- 公式: (牌價${base_list:,} / 標準{base_std}檔 * 秒數{factor} * 懲罰{penalty}) = 單價 ${unit_rate_h:,}\n"
+                    f"- 公式: (牌價${base_list:,} / 標準{base_std}檔 * 秒數{factor:.2f} * 懲罰{penalty}) = 單價 ${unit_rate_h:,}\n"
                     f"- 計算: ${unit_rate_h:,} x {spots_final}檔"
                 ]
                 
@@ -519,7 +546,6 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
         total_spots_all += daily_sum
         ws.cell(curr_row, col_idx).alignment = Alignment(horizontal='center', vertical='center')
     
-    # [FIX] Total Spots Style
     ws.cell(curr_row, total_spot_col).value = total_spots_all
     ws.cell(curr_row, total_spot_col).font = Font(name=FONT_MAIN, size=14, bold=True)
     ws.cell(curr_row, total_spot_col).alignment = Alignment(horizontal='center', vertical='center')
@@ -568,7 +594,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=12)
         ws.cell(curr_row, val_col).value = val
         ws.cell(curr_row, val_col).number_format = "#,##0"
-        ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center') # [FIX] Center
+        ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center')
         ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=12)
         
         if label == "Grand Total":
@@ -729,7 +755,7 @@ with st.sidebar:
             st.session_state.is_supervisor = False
             st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v80.1)")
+st.title("📺 媒體 Cue 表生成器 (v80.2)")
 
 st.markdown("### 1. 選擇格式")
 format_type = st.radio("", ["Dongwu", "Shenghuo"], horizontal=True)
@@ -890,7 +916,8 @@ if is_cf:
 if config:
     rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count)
     
-    prod_cost = prod_cost_input # Unified variable
+    # [FIX] Vars
+    prod_cost = prod_cost_input
     vat = int(round(final_budget_val * 0.05))
     grand_total = final_budget_val + vat
     
