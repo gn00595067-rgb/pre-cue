@@ -4,7 +4,7 @@ import traceback
 # =========================================================
 # 1. 頁面設定 (必須是程式的第一個有效指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v101.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v101.1")
 
 import pandas as pd
 import math
@@ -23,7 +23,17 @@ from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill, Color
 
 # =========================================================
-# 2. 全域常數 (Global Constants)
+# 2. Session State 初始化 (移至最上層以確保絕對執行)
+# =========================================================
+if "is_supervisor" not in st.session_state:
+    st.session_state.is_supervisor = False
+
+if "rad_share" not in st.session_state: st.session_state.rad_share = 100
+if "fv_share" not in st.session_state: st.session_state.fv_share = 0
+if "cf_share" not in st.session_state: st.session_state.cf_share = 0
+
+# =========================================================
+# 3. 全域常數 (Global Constants)
 # =========================================================
 GSHEET_SHARE_URL = "https://docs.google.com/spreadsheets/d/1bzmG-N8XFsj8m3LUPqA8K70AcIqaK4Qhq1VPWcK0w_s/edit?usp=sharing"
 
@@ -35,7 +45,6 @@ BS_HAIR = 'hair'
 FMT_MONEY = '"$"#,##0_);[Red]("$"#,##0)' 
 FMT_NUMBER = '#,##0'
 
-# [FIX] 補回遺失的常數定義
 REGIONS_ORDER = ["北區", "桃竹苗", "中區", "雲嘉南", "高屏", "東區"]
 DURATIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 
@@ -46,7 +55,7 @@ REGION_DISPLAY_MAP = {
 }
 
 # =========================================================
-# 3. 基礎工具函式
+# 4. 基礎工具函式
 # =========================================================
 def parse_count_to_int(x):
     if x is None: return 0
@@ -119,7 +128,7 @@ def load_font_base64():
     return None
 
 # =========================================================
-# 4. OpenPyXL Helpers
+# 5. OpenPyXL Helpers
 # =========================================================
 def set_border(cell, top=None, bottom=None, left=None, right=None):
     cur = cell.border
@@ -145,7 +154,7 @@ def draw_outer_border(ws, min_r, max_r, min_c, max_c):
             set_border(cell, top=BS_MEDIUM if r == min_r else None, bottom=BS_MEDIUM if r == max_r else None, left=BS_MEDIUM if c == min_c else None, right=BS_MEDIUM if c == max_c else None)
 
 # =========================================================
-# 5. 業務邏輯與計算
+# 6. 業務邏輯與計算
 # =========================================================
 @st.cache_data(ttl=300)
 def load_config_from_cloud(share_url):
@@ -263,7 +272,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
     return rows, total_list_accum, debug_logs
 
 # =========================================================
-# 6. Render Engines
+# 7. Render Engines
 # =========================================================
 
 # --- Dongwu ---
@@ -524,6 +533,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             curr_row += 1
         draw_outer_border(ws, 7, curr_row-1, 1, 39)
 
+    # Remarks
     if format_type == "Dongwu":
         curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："
         ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
@@ -585,7 +595,7 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     return f"<html><head><style>body {{ font-family: sans-serif; font-size: 10px; }} table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }} .bg-dw-head {{ background-color: #4472C4; color: white; }} .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }} .bg-bolin-head {{ background-color: #F8CBAD; color: black; }} .bg-weekend {{ background-color: #FFFFCC; }}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
 
 # =========================================================
-# 10. Main Execution Block
+# 9. Main Execution Block (Safety Wrapper)
 # =========================================================
 def main():
     try:
@@ -608,7 +618,7 @@ def main():
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
         # Main UI
-        st.title("📺 媒體 Cue 表生成器 (v101.0)")
+        st.title("📺 媒體 Cue 表生成器 (v96.1)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
@@ -640,7 +650,7 @@ def main():
             billing_month = rc2.text_input("請款月份", "2026年2月")
             payment_date = rc3.date_input("付款兌現日", datetime(2026, 3, 31))
 
-        # Media Selection UI (Now safely inside main)
+        # Media Selection UI
         st.markdown("### 3. 媒體投放設定")
         col_cb1, col_cb2, col_cb3 = st.columns(3)
         
@@ -731,7 +741,6 @@ def main():
                 elif secs: sec_shares[secs[0]] = 100
                 config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
 
-        # Execute Logic
         if config:
             rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count, PRICING_DB, SEC_FACTORS, STORE_COUNTS_NUM, REGIONS_ORDER)
             prod_cost = prod_cost_input 
@@ -741,14 +750,12 @@ def main():
             rem = get_remarks_text(sign_deadline, billing_month, payment_date)
             html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
             st.components.v1.html(html_preview, height=700, scrolling=True)
-            
             with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
                 for log in logs:
                     st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
                     if 'Details' in log:
                         for detail in log['Details']: st.info(detail)
                     st.divider()
-            
             col_dl1, col_dl2 = st.columns(2)
             with col_dl2:
                 try:
