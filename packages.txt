@@ -1,0 +1,5 @@
+libreoffice
+default-jre
+fonts-noto-cjk
+libpango-1.0-0
+libpangoft2-1.0-0
