@@ -4,7 +4,7 @@ import traceback
 # =========================================================
 # 1. 頁面設定 (必須是程式的第一個有效指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v99.3")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v100.0")
 
 import pandas as pd
 import math
@@ -489,51 +489,6 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
         if mode == "Dongwu" and c==1: set_border(cell, left=BS_MEDIUM)
     return curr_row
 
-def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
-    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "工作表1"; ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1
-    unique_secs = sorted(list(set([r['seconds'] for r in rows]))); product_display_str_dongwu = f"{'、'.join([f'{s}秒' for s in unique_secs])} {product_name}"
-    
-    if format_type == "Dongwu": curr_row = render_dongwu(ws, start_dt, end_dt, client_name, product_display_str_dongwu, rows, remarks_list, final_budget_val)
-    elif format_type == "Shenghuo": curr_row = render_shenghuo(ws, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost)
-    else: curr_row = render_bolin(ws, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost)
-
-    if format_type == "Dongwu":
-        curr_row += 1; vat = int(round(final_budget_val * 0.05)); grand_total = final_budget_val + vat
-        footer_data = [("製作", prod_cost), ("5% VAT", vat), ("Grand Total", grand_total)]; label_col = 6; val_col = 7
-        for label, val in footer_data:
-            ws.row_dimensions[curr_row].height = 30
-            ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center'); ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14)
-            ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = FMT_MONEY; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14)
-            set_border(ws.cell(curr_row, label_col), left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
-            set_border(ws.cell(curr_row, val_col), right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
-            if label == "Grand Total":
-                for c in range(1, 40): set_border(ws.cell(curr_row, c), top=BS_MEDIUM, bottom=BS_MEDIUM)
-            curr_row += 1
-        draw_outer_border(ws, 7, curr_row-1, 1, 39)
-
-    # Remarks
-    if format_type == "Dongwu":
-        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："; ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
-        for c in range(1, 40): set_border(ws.cell(curr_row, c), top=None)
-        curr_row += 1
-        for rm in remarks_list:
-            ws.cell(curr_row, 1).value = rm; f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
-            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color); curr_row += 1
-    elif format_type == "Shenghuo":
-        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："; ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
-        curr_row += 1
-        for rm in remarks_list:
-            ws.cell(curr_row, 1).value = rm; f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
-            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color); curr_row += 1
-    elif format_type == "Bolin":
-        curr_row += 1; ws.cell(curr_row, 9).value = "Remarks："
-        ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single")
-        curr_row += 1
-        for rm in remarks_list:
-            ws.cell(curr_row, 9).value = rm; ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True); curr_row += 1
-
-    out = io.BytesIO(); wb.save(out); return out.getvalue()
-
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
     eff_days = days_cnt
     header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
@@ -571,7 +526,7 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     return f"<html><head><style>body {{ font-family: sans-serif; font-size: 10px; }} table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }} .bg-dw-head {{ background-color: #4472C4; color: white; }} .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }} .bg-bolin-head {{ background-color: #F8CBAD; color: black; }} .bg-weekend {{ background-color: #FFFFCC; }}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
 
 # =========================================================
-# 10. Main Execution Block (Safety Wrapper)
+# 9. Main Execution Block
 # =========================================================
 def main():
     try:
@@ -581,8 +536,62 @@ def main():
             st.error(f"❌ 設定檔載入失敗: {err_msg}")
             st.stop()
         
-        # Calculate
+        # Sidebar UI
+        with st.sidebar:
+            st.header("🕵️ 主管登入")
+            if not st.session_state.is_supervisor:
+                pwd = st.text_input("輸入密碼", type="password", key="pwd_input")
+                if st.button("登入"):
+                    if pwd == "1234": st.session_state.is_supervisor = True; st.rerun()
+                    else: st.error("密碼錯誤")
+            else:
+                st.success("✅ 目前狀態：主管模式"); 
+                if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
+
+        # Main UI
+        st.title("📺 媒體 Cue 表生成器 (v100.0)")
+        format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
+
+        c1, c2, c3, c4, c5_sales = st.columns(5)
+        with c1: client_name = st.text_input("客戶名稱", "萬國通路")
+        with c2: product_name = st.text_input("產品名稱", "統一布丁")
+        with c3: total_budget_input = st.number_input("總預算 (未稅 Net)", value=1000000, step=10000)
+        with c4: prod_cost_input = st.number_input("製作費 (未稅)", value=0, step=1000)
+        with c5_sales: sales_person = st.text_input("業務名稱", "")
+
+        final_budget_val = total_budget_input
+        if st.session_state.is_supervisor:
+            st.markdown("---")
+            col_sup1, col_sup2 = st.columns([1, 2])
+            with col_sup1: st.error("🔒 [主管] 專案優惠價覆寫")
+            with col_sup2:
+                override_val = st.number_input("輸入最終成交價", value=total_budget_input)
+                if override_val != total_budget_input: final_budget_val = override_val; st.caption(f"⚠️ 使用 ${final_budget_val:,} 結算")
+            st.markdown("---")
+
+        c5, c6 = st.columns(2)
+        with c5: start_date = st.date_input("開始日", datetime(2026, 1, 1))
+        with c6: end_date = st.date_input("結束日", datetime(2026, 1, 31))
+        days_count = (end_date - start_date).days + 1
+        st.info(f"📅 走期共 **{days_count}** 天")
+
+        with st.expander("📝 備註欄位設定", expanded=False):
+            rc1, rc2, rc3 = st.columns(3)
+            sign_deadline = rc1.date_input("回簽截止日", datetime.now() + timedelta(days=3))
+            billing_month = rc2.text_input("請款月份", "2026年2月")
+            payment_date = rc3.date_input("付款兌現日", datetime(2026, 3, 31))
+
+        # Media Selection UI (Defines is_rad, is_fv...)
+        st.markdown("### 3. 媒體投放設定")
+        col_cb1, col_cb2, col_cb3 = st.columns(3)
+        # Using session state to persist choices if needed, but simple checkbox is fine here
+        is_rad = col_cb1.checkbox("全家廣播", value=True, key="cb_rad")
+        is_fv = col_cb2.checkbox("新鮮視", value=False, key="cb_fv")
+        is_cf = col_cb3.checkbox("家樂福", value=False, key="cb_cf")
+
+        m1, m2, m3 = st.columns(3)
         config = {}
+        
         if is_rad:
             with m1:
                 st.markdown("#### 📻 全家廣播")
@@ -590,7 +599,7 @@ def main():
                 regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=REGIONS_ORDER, key="rad_reg")
                 if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
                 secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
-                st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
+                st.slider("預算 %", 0, 100, 100, key="rad_share") # Simple slider for now
                 sec_shares = {}
                 if len(secs) > 1:
                     rem = 100; sorted_secs = sorted(secs)
@@ -598,7 +607,7 @@ def main():
                         if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}"); sec_shares[s] = v; rem -= v
                         else: sec_shares[s] = rem
                 elif secs: sec_shares[secs[0]] = 100
-                config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
+                config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.get("rad_share", 100)}
 
         if is_fv:
             with m2:
@@ -607,7 +616,7 @@ def main():
                 regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=["北區"], key="fv_reg")
                 if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
                 secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
-                st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
+                st.slider("預算 %", 0, 100, 0, key="fv_share")
                 sec_shares = {}
                 if len(secs) > 1:
                     rem = 100; sorted_secs = sorted(secs)
@@ -615,13 +624,13 @@ def main():
                         if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}"); sec_shares[s] = v; rem -= v
                         else: sec_shares[s] = rem
                 elif secs: sec_shares[secs[0]] = 100
-                config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
+                config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.get("fv_share", 0)}
 
         if is_cf:
             with m3:
                 st.markdown("#### 🛒 家樂福")
                 secs = st.multiselect("秒數", DURATIONS, [20], key="cf_sec")
-                st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
+                st.slider("預算 %", 0, 100, 0, key="cf_share")
                 sec_shares = {}
                 if len(secs) > 1:
                     rem = 100; sorted_secs = sorted(secs)
@@ -629,8 +638,9 @@ def main():
                         if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"cs_{s}"); sec_shares[s] = v; rem -= v
                         else: sec_shares[s] = rem
                 elif secs: sec_shares[secs[0]] = 100
-                config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
+                config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.get("cf_share", 0)}
 
+        # Execute Logic
         if config:
             rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count, PRICING_DB, SEC_FACTORS, STORE_COUNTS_NUM, REGIONS_ORDER)
             prod_cost = prod_cost_input 
@@ -640,12 +650,14 @@ def main():
             rem = get_remarks_text(sign_deadline, billing_month, payment_date)
             html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
             st.components.v1.html(html_preview, height=700, scrolling=True)
+            
             with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
                 for log in logs:
                     st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
                     if 'Details' in log:
                         for detail in log['Details']: st.info(detail)
                     st.divider()
+            
             col_dl1, col_dl2 = st.columns(2)
             with col_dl2:
                 try:
