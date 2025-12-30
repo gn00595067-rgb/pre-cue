@@ -3,7 +3,7 @@ import streamlit as st
 # =========================================================
 # 1. 頁面設定 (必須是第一個 st 指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v96.1")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v99.0")
 
 import pandas as pd
 import math
@@ -366,8 +366,9 @@ def calculate_plan_data(config, total_budget, days_count):
 # 8. Render Engines
 # =========================================================
 
-# ----------------- Dongwu Engine -----------------
+# ----------------- Dongwu Engine (Legacy - FROZEN) -----------------
 def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
+    # This function is strictly V86/V96 logic. Do not touch.
     COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
     ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
     for k, v in COL_WIDTHS.items(): ws.column_dimensions[k].width = v
@@ -378,7 +379,7 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     style_range(ws, "A1:AM1", font=Font(name=FONT_MAIN, size=48, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
     for c in range(1, 40): set_border(ws.cell(3, c), top=BS_MEDIUM)
     
-    # [FIX] Dynamic Medium String
+    # Dynamic Medium String
     unique_media = sorted(list(set([r['media'] for r in rows])))
     order = {"全家廣播": 1, "新鮮視": 2, "家樂福": 3}
     unique_media.sort(key=lambda x: order.get(x, 99))
@@ -410,20 +411,14 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     set_border(ws['AM7'], top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
     return render_data_rows(ws, rows, 9, final_budget_val, eff_days, "Dongwu", product_display_str)
 
-# ----------------- Shenghuo Engine -----------------
+# ----------------- Shenghuo Engine (Infinite + White + Custom Format + Pkg Logic) -----------------
 def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, remarks_list, final_budget_val, prod_cost):
     days_n = (end_dt - start_dt).days + 1
     
-    ws.column_dimensions['A'].width = 22.5
-    ws.column_dimensions['B'].width = 24.5
-    ws.column_dimensions['C'].width = 13.8
-    ws.column_dimensions['D'].width = 19.4
-    ws.column_dimensions['E'].width = 13.0
+    ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 13.0
     for i in range(days_n): ws.column_dimensions[get_column_letter(6 + i)].width = 13.0
     end_c_start = 6 + days_n
-    ws.column_dimensions[get_column_letter(end_c_start)].width = 13.0   
-    ws.column_dimensions[get_column_letter(end_c_start+1)].width = 59.0 
-    ws.column_dimensions[get_column_letter(end_c_start+2)].width = 13.2 
+    ws.column_dimensions[get_column_letter(end_c_start)].width = 13.0; ws.column_dimensions[get_column_letter(end_c_start+1)].width = 59.0; ws.column_dimensions[get_column_letter(end_c_start+2)].width = 13.2 
     total_cols = 5 + days_n + 3
     ROW_H_MAP = {1:46, 2:46, 3:46, 4:46.5, 5:40, 6:40, 7:40, 8:40}
     for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
@@ -441,10 +436,8 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
 
     ws['A5'] = "客戶名稱："; ws['B5'] = client_name
     ws['F5'] = "廣告規格："; 
-    
     unique_secs = sorted(list(set([r['seconds'] for r in rows])))
     ws['H5'] = " ".join([f"{s}秒廣告" for s in unique_secs])
-
     date_range_col = total_cols - 1
     ws.cell(5, date_range_col).value = f"執行期間：: {start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"
     ws.cell(5, date_range_col).alignment = Alignment(horizontal='right', vertical='center')
@@ -453,20 +446,16 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
     ws.cell(6, 6).value = f"{start_dt.month}月"
     for i in range(days_n):
         d = start_dt + timedelta(days=i)
-        if d.month != start_dt.month and d.day == 1:
-            ws.cell(6, 6+i).value = f"{d.month}月"
+        if d.month != start_dt.month and d.day == 1: ws.cell(6, 6+i).value = f"{d.month}月"
 
     headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
     for i, h in enumerate(headers):
         ws.merge_cells(start_row=7, start_column=i+1, end_row=8, end_column=i+1)
         cell = ws.cell(7, i+1); cell.value = h
-        style_range(ws, f"{get_column_letter(i+1)}7:{get_column_letter(i+1)}8", 
-                    font=Font(name=FONT_MAIN, size=14, bold=True), 
-                    alignment=Alignment(horizontal='center', vertical='center', wrap_text=True))
+        style_range(ws, f"{get_column_letter(i+1)}7:{get_column_letter(i+1)}8", font=Font(name=FONT_MAIN, size=14, bold=True), alignment=Alignment(horizontal='center', vertical='center', wrap_text=True))
         set_border(cell, top=BS_MEDIUM, bottom=BS_HAIR, left=BS_HAIR, right=BS_HAIR)
     
-    set_border(ws.cell(7,1), top=BS_MEDIUM, left=BS_MEDIUM, right=BS_HAIR)
-    set_border(ws.cell(8,1), bottom=BS_HAIR, left=BS_MEDIUM, right=BS_HAIR)
+    set_border(ws.cell(7,1), top=BS_MEDIUM, left=BS_MEDIUM, right=BS_HAIR); set_border(ws.cell(8,1), bottom=BS_HAIR, left=BS_MEDIUM, right=BS_HAIR)
 
     curr = start_dt
     for i in range(days_n):
@@ -478,10 +467,7 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         cell8 = ws.cell(8, c); cell8.value = f'=MID("日一二三四五六",WEEKDAY({get_column_letter(c)}7,1),1)'
         cell8.font = Font(name=FONT_MAIN, size=14, bold=True); cell8.alignment = Alignment(horizontal='center', vertical='center')
         set_border(cell8, top=BS_HAIR, bottom=BS_HAIR, left=BS_HAIR, right=BS_HAIR)
-        
-        if curr.weekday() >= 5:
-            cell8.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
-        
+        if curr.weekday() >= 5: cell8.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
         curr += timedelta(days=1)
 
     end_headers = ["檔次", "定價", "專案價"]
@@ -489,17 +475,14 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         c = end_c_start + i
         ws.merge_cells(start_row=7, start_column=c, end_row=8, end_column=c)
         ws.cell(7, c).value = h
-        style_range(ws, f"{get_column_letter(c)}7:{get_column_letter(c)}8",
-                    font=Font(name=FONT_MAIN, size=14, bold=True),
-                    alignment=Alignment(horizontal='center', vertical='center'))
+        style_range(ws, f"{get_column_letter(c)}7:{get_column_letter(c)}8", font=Font(name=FONT_MAIN, size=14, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
         set_border(ws.cell(7, c), top=BS_MEDIUM, bottom=BS_HAIR, left=BS_HAIR, right=BS_HAIR)
     
-    set_border(ws.cell(7, total_cols), top=BS_MEDIUM, right=BS_MEDIUM, left=BS_HAIR)
-    set_border(ws.cell(8, total_cols), bottom=BS_HAIR, right=BS_MEDIUM, left=BS_HAIR)
+    set_border(ws.cell(7, total_cols), top=BS_MEDIUM, right=BS_MEDIUM, left=BS_HAIR); set_border(ws.cell(8, total_cols), bottom=BS_HAIR, right=BS_MEDIUM, left=BS_HAIR)
 
     return render_data_rows(ws, rows, 9, final_budget_val, days_n, "Shenghuo", product_name_raw)
 
-# ----------------- Bolin Engine -----------------
+# ----------------- Bolin Engine (Infinite + Pkg Logic) -----------------
 def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, remarks_list, final_budget_val, prod_cost):
     days_n = (end_dt - start_dt).days + 1
     total_cols = 1 + 5 + days_n + 3 
@@ -608,21 +591,26 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
             ws.cell(curr_row, base_c+4).value = sec_txt
             
             rate_val = r_data["rate_display"]; pkg_val = r_data["pkg_display"]
-            if r_data.get("is_pkg_member") and idx == 0: pkg_val = r_data["nat_pkg_display"]
-            elif r_data.get("is_pkg_member"): pkg_val = ""
+            
+            # [FIX] Package Merging Logic - Only show value on first row if pkg
+            show_price = True
+            if r_data.get("is_pkg_member"):
+                if idx == 0: pkg_val = r_data["nat_pkg_display"]
+                else: show_price = False
 
             if mode == "Dongwu":
-                ws.cell(curr_row, 6).value = rate_val; ws.cell(curr_row, 7).value = pkg_val
+                ws.cell(curr_row, 6).value = rate_val; 
+                if show_price: ws.cell(curr_row, 7).value = pkg_val
                 sch_start_col = 8; total_col = 39
             elif mode == "Shenghuo":
                 sch_start_col = 6
                 ws.cell(curr_row, 5+eff_days+2).value = rate_val
-                ws.cell(curr_row, 5+eff_days+3).value = pkg_val
+                if show_price: ws.cell(curr_row, 5+eff_days+3).value = pkg_val
                 total_col = 5+eff_days+1
             else: # Bolin
                 sch_start_col = 7
                 ws.cell(curr_row, 1+5+eff_days+2).value = rate_val 
-                ws.cell(curr_row, 1+5+eff_days+3).value = pkg_val 
+                if show_price: ws.cell(curr_row, 1+5+eff_days+3).value = pkg_val 
                 total_col = 1+5+eff_days+1
 
             sch = r_data["schedule"]; row_sum = 0
@@ -666,13 +654,14 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
         if curr_row > start_merge_row:
             ws.merge_cells(start_row=start_merge_row, start_column=start_c, end_row=curr_row-1, end_column=start_c)
         
+        # [FIX] Merge Package Price Cells
         if data[0].get("is_pkg_member"):
             if mode == "Dongwu": ws.merge_cells(start_row=start_merge_row, start_column=7, end_row=curr_row-1, end_column=7)
             elif mode == "Shenghuo": 
                 p_c = 5+eff_days+3
                 ws.merge_cells(start_row=start_merge_row, start_column=p_c, end_row=curr_row-1, end_column=p_c)
             else: # Bolin
-                ws.merge_cells(start_row=start_merge_row, start_column=40, end_row=curr_row-1, end_column=40)
+                ws.merge_cells(start_row=start_merge_row, start_column=1+5+eff_days+3, end_row=curr_row-1, end_column=1+5+eff_days+3)
         
         if mode == "Dongwu":
             for col_idx in [4, 5]:
@@ -724,67 +713,6 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
     
     return curr_row
 
-def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
-    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "工作表1"
-    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1
-    
-    unique_secs = sorted(list(set([r['seconds'] for r in rows])))
-    product_display_str_dongwu = f"{'、'.join([f'{s}秒' for s in unique_secs])} {product_name}"
-    
-    if format_type == "Dongwu": curr_row = render_dongwu(ws, start_dt, end_dt, client_name, product_display_str_dongwu, rows, remarks_list, final_budget_val)
-    elif format_type == "Shenghuo": curr_row = render_shenghuo(ws, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost)
-    else: curr_row = render_bolin(ws, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost)
-
-    if format_type == "Dongwu":
-        curr_row += 1
-        vat = int(round(final_budget_val * 0.05)); grand_total = final_budget_val + vat
-        footer_data = [("製作", prod_cost), ("5% VAT", vat), ("Grand Total", grand_total)]
-        label_col = 6; val_col = 7
-        for label, val in footer_data:
-            ws.row_dimensions[curr_row].height = 30
-            ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center'); ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14)
-            ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = FMT_MONEY; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14)
-            set_border(ws.cell(curr_row, label_col), left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
-            set_border(ws.cell(curr_row, val_col), right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
-            if label == "Grand Total":
-                # Grand Total for Dongwu: No Color, Only Border
-                for c in range(1, 40): set_border(ws.cell(curr_row, c), top=BS_MEDIUM, bottom=BS_MEDIUM)
-            curr_row += 1
-        draw_outer_border(ws, 7, curr_row-1, 1, 39)
-
-    if format_type == "Dongwu":
-        curr_row += 1
-        ws.cell(curr_row, 1).value = "Remarks："
-        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
-        for c in range(1, 40): set_border(ws.cell(curr_row, c), top=None)
-        curr_row += 1
-        for rm in remarks_list:
-            ws.cell(curr_row, 1).value = rm
-            f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
-            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
-            curr_row += 1
-    elif format_type == "Shenghuo":
-        curr_row += 1
-        ws.cell(curr_row, 1).value = "Remarks："
-        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
-        curr_row += 1
-        for rm in remarks_list:
-            ws.cell(curr_row, 1).value = rm
-            f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
-            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
-            curr_row += 1
-    elif format_type == "Bolin":
-        curr_row += 1
-        ws.cell(curr_row, 9).value = "Remarks："
-        ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single")
-        curr_row += 1
-        for rm in remarks_list:
-            ws.cell(curr_row, 9).value = rm
-            ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True)
-            curr_row += 1
-
-    out = io.BytesIO(); wb.save(out); return out.getvalue()
-
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
     eff_days = days_cnt
     header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
@@ -806,19 +734,53 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
 
     tbody = ""
-    for r in rows:
+    
+    # Group logic for HTML preview to match Excel Merging
+    grouped_rows = {}
+    # Need to group by media (and pkg status) to simulate merging logic for 'Package Cost' column
+    # Simple approach: iterate rows, if pkg_member & same media & group start -> show price, else empty
+    
+    # We already have rows flat, but we know they come from 'calculate_plan_data' grouped by media logic essentially
+    # Let's iterate and track pkg groups
+    
+    # Re-sort to match Excel render order
+    rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
+    
+    # Logic to track package groups
+    pkg_tracker = {} # Key: (Media, Seconds), Value: Bool (Shown)
+    
+    for r in rows_sorted:
         tbody += "<tr>"
-        # Adjust display based on format
-        rate = f"${r['rate_display']:,}" if isinstance(r['rate_display'], (int, float)) else r['rate_display']
-        pkg = f"${r['pkg_display']:,}" if isinstance(r['pkg_display'], (int, float)) else r['pkg_display']
         
+        # Prepare Values
+        rate = f"${r['rate_display']:,}" if isinstance(r['rate_display'], (int, float)) else r['rate_display']
+        
+        # Package Price Logic for HTML
+        pkg_val = ""
+        if r['is_pkg_member']:
+            key = (r['media'], r['seconds']) # Simplistic group key
+            # Better: calculate_plan_data assigns 'nat_pkg_display' to ALL rows in pkg.
+            # We need to show it only on the FIRST row of that package group.
+            # Since rows are sorted, we can check if we've seen this 'nat_pkg_display' + 'media' combination?
+            # Or just use the fact that calculate_plan_data sets identical values.
+            # Hack: Use a tracker for the unique object ID of the package price? No, value is int.
+            # Let's use a composite key for the "Batch": Media + Seconds + TotalPrice
+            p_key = f"{r['media']}_{r['seconds']}_{r['nat_pkg_display']}"
+            if p_key not in pkg_tracker:
+                pkg_val = f"${r['nat_pkg_display']:,}"
+                pkg_tracker[p_key] = True
+            else:
+                pkg_val = "" # Hide for subsequent rows
+        else:
+            pkg_val = f"${r['pkg_display']:,}" if isinstance(r['pkg_display'], (int, float)) else r['pkg_display']
+
         if format_type == "Shenghuo":
              sec_txt = f"{r['seconds']}秒"
-             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td><td>{rate}</td><td>{pkg}</td>"
+             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td><td>{rate}</td><td>{pkg_val}</td>"
         elif format_type == "Bolin":
-             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}秒</td><td>{rate}</td><td>{pkg}</td>"
+             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}秒</td><td>{rate}</td><td>{pkg_val}</td>"
         else: # Dongwu
-             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td><td>{pkg}</td>"
+             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td><td>{pkg_val}</td>"
         
         for d in r['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
         tbody += "</tr>"
@@ -857,173 +819,3 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
         <b>Remarks：</b><br>{remarks_html}
     </div>
     </body></html>"""
-
-with st.sidebar:
-    st.header("🕵️ 主管登入")
-    if not st.session_state.is_supervisor:
-        pwd = st.text_input("輸入密碼", type="password", key="pwd_input")
-        if st.button("登入"):
-            if pwd == "1234": st.session_state.is_supervisor = True; st.rerun()
-            else: st.error("密碼錯誤")
-    else:
-        st.success("✅ 目前狀態：主管模式"); 
-        if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
-
-st.title("📺 媒體 Cue 表生成器 (v98.0)")
-format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
-
-c1, c2, c3, c4, c5_sales = st.columns(5)
-with c1: client_name = st.text_input("客戶名稱", "萬國通路")
-with c2: product_name = st.text_input("產品名稱", "統一布丁")
-with c3: total_budget_input = st.number_input("總預算 (未稅 Net)", value=1000000, step=10000)
-with c4: prod_cost_input = st.number_input("製作費 (未稅)", value=0, step=1000)
-with c5_sales: sales_person = st.text_input("業務名稱", "")
-
-final_budget_val = total_budget_input
-if st.session_state.is_supervisor:
-    st.markdown("---")
-    col_sup1, col_sup2 = st.columns([1, 2])
-    with col_sup1: st.error("🔒 [主管] 專案優惠價覆寫")
-    with col_sup2:
-        override_val = st.number_input("輸入最終成交價", value=total_budget_input)
-        if override_val != total_budget_input: final_budget_val = override_val; st.caption(f"⚠️ 使用 ${final_budget_val:,} 結算")
-    st.markdown("---")
-
-c5, c6 = st.columns(2)
-with c5: start_date = st.date_input("開始日", datetime(2026, 1, 1))
-with c6: end_date = st.date_input("結束日", datetime(2026, 1, 31))
-days_count = (end_date - start_date).days + 1
-st.info(f"📅 走期共 **{days_count}** 天")
-
-with st.expander("📝 備註欄位設定", expanded=False):
-    rc1, rc2, rc3 = st.columns(3)
-    sign_deadline = rc1.date_input("回簽截止日", datetime.now() + timedelta(days=3))
-    billing_month = rc2.text_input("請款月份", "2026年2月")
-    payment_date = rc3.date_input("付款兌現日", datetime(2026, 3, 31))
-
-st.markdown("### 3. 媒體投放設定")
-if "rad_share" not in st.session_state: st.session_state.rad_share = 100
-if "fv_share" not in st.session_state: st.session_state.fv_share = 0
-if "cf_share" not in st.session_state: st.session_state.cf_share = 0
-
-def on_media_change():
-    active = []
-    if st.session_state.get("cb_rad"): active.append("rad_share")
-    if st.session_state.get("cb_fv"): active.append("fv_share")
-    if st.session_state.get("cb_cf"): active.append("cf_share")
-    if not active: return
-    share = 100 // len(active)
-    for key in active: st.session_state[key] = share
-    rem = 100 - sum([st.session_state[k] for k in active])
-    st.session_state[active[0]] += rem
-
-def on_slider_change(changed_key):
-    active = []
-    if st.session_state.get("cb_rad"): active.append("rad_share")
-    if st.session_state.get("cb_fv"): active.append("fv_share")
-    if st.session_state.get("cb_cf"): active.append("cf_share")
-    others = [k for k in active if k != changed_key]
-    if not others: st.session_state[changed_key] = 100
-    elif len(others) == 1:
-        val = st.session_state[changed_key]
-        st.session_state[others[0]] = max(0, 100 - val)
-    elif len(others) == 2:
-        val = st.session_state[changed_key]
-        rem = max(0, 100 - val)
-        k1, k2 = others[0], others[1]
-        sum_others = st.session_state[k1] + st.session_state[k2]
-        if sum_others == 0: st.session_state[k1] = rem // 2; st.session_state[k2] = rem - st.session_state[k1]
-        else:
-            ratio = st.session_state[k1] / sum_others
-            st.session_state[k1] = int(rem * ratio)
-            st.session_state[k2] = rem - st.session_state[k1]
-
-col_cb1, col_cb2, col_cb3 = st.columns(3)
-with col_cb1: is_rad = st.checkbox("全家廣播", value=True, key="cb_rad", on_change=on_media_change)
-with col_cb2: is_fv = st.checkbox("新鮮視", value=False, key="cb_fv", on_change=on_media_change)
-with col_cb3: is_cf = st.checkbox("家樂福", value=False, key="cb_cf", on_change=on_media_change)
-
-m1, m2, m3 = st.columns(3)
-config = {}
-if is_rad:
-    with m1:
-        st.markdown("#### 📻 全家廣播")
-        is_nat = st.checkbox("全省聯播", True, key="rad_nat")
-        regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=REGIONS_ORDER, key="rad_reg")
-        if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
-        secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
-        st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
-        sec_shares = {}
-        if len(secs) > 1:
-            rem = 100; sorted_secs = sorted(secs)
-            for i, s in enumerate(sorted_secs):
-                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}"); sec_shares[s] = v; rem -= v
-                else: sec_shares[s] = rem
-        elif secs: sec_shares[secs[0]] = 100
-        config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
-
-if is_fv:
-    with m2:
-        st.markdown("#### 📺 新鮮視")
-        is_nat = st.checkbox("全省聯播", False, key="fv_nat")
-        regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=["北區"], key="fv_reg")
-        if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
-        secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
-        st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
-        sec_shares = {}
-        if len(secs) > 1:
-            rem = 100; sorted_secs = sorted(secs)
-            for i, s in enumerate(sorted_secs):
-                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}"); sec_shares[s] = v; rem -= v
-                else: sec_shares[s] = rem
-        elif secs: sec_shares[secs[0]] = 100
-        config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
-
-if is_cf:
-    with m3:
-        st.markdown("#### 🛒 家樂福")
-        secs = st.multiselect("秒數", DURATIONS, [20], key="cf_sec")
-        st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
-        sec_shares = {}
-        if len(secs) > 1:
-            rem = 100; sorted_secs = sorted(secs)
-            for i, s in enumerate(sorted_secs):
-                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"cs_{s}"); sec_shares[s] = v; rem -= v
-                else: sec_shares[s] = rem
-        elif secs: sec_shares[secs[0]] = 100
-        config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
-
-if config:
-    rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count)
-    prod_cost = prod_cost_input 
-    vat = int(round(final_budget_val * 0.05))
-    grand_total = final_budget_val + vat
-    p_str = f"{'、'.join([f'{s}秒' for s in sorted(list(set(r['seconds'] for r in rows)))])} {product_name}"
-    rem = get_remarks_text(sign_deadline, billing_month, payment_date)
-    html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
-    st.components.v1.html(html_preview, height=700, scrolling=True)
-    with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
-        for log in logs:
-            st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
-            if 'Details' in log:
-                for detail in log['Details']: st.info(detail)
-            st.divider()
-    col_dl1, col_dl2 = st.columns(2)
-    with col_dl2:
-        try:
-            xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
-            pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
-            if pdf_bytes: st.download_button(f"📥 下載 PDF ({method})", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl")
-            else: 
-                # Use WeasyPrint if LibreOffice unavailable
-                pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
-                if pdf_bytes: st.download_button("📥 下載 PDF (Web)", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl_web")
-        except: pass
-    with col_dl1:
-        if st.session_state.is_supervisor:
-            if rows:
-                try:
-                    xlsx = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
-                    st.download_button("📥 下載 Excel (主管權限)", xlsx, f"Cue_{safe_filename(client_name)}.xlsx", key="xlsx_dl")
-                except Exception as e: st.error(f"Excel Error: {e}")
-        else: st.info("🔒 Excel 下載功能僅限主管使用")
