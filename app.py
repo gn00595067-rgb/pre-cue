@@ -3,7 +3,7 @@ import streamlit as st
 # =========================================================
 # 1. 頁面設定 (必須是第一個 st 指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v98.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v96.1")
 
 import pandas as pd
 import math
@@ -29,7 +29,7 @@ BS_THIN = 'thin'
 BS_MEDIUM = 'medium'
 BS_HAIR = 'hair'
 
-# Formats
+# Money Format
 FMT_MONEY = '"$"#,##0_);[Red]("$"#,##0)' 
 FMT_NUMBER = '#,##0'
 
@@ -479,7 +479,6 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         cell8.font = Font(name=FONT_MAIN, size=14, bold=True); cell8.alignment = Alignment(horizontal='center', vertical='center')
         set_border(cell8, top=BS_HAIR, bottom=BS_HAIR, left=BS_HAIR, right=BS_HAIR)
         
-        # Weekend Color Row 8 Only
         if curr.weekday() >= 5:
             cell8.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
         
@@ -724,6 +723,67 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
         if mode == "Dongwu" and c==1: set_border(cell, left=BS_MEDIUM)
     
     return curr_row
+
+def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "工作表1"
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1
+    
+    unique_secs = sorted(list(set([r['seconds'] for r in rows])))
+    product_display_str_dongwu = f"{'、'.join([f'{s}秒' for s in unique_secs])} {product_name}"
+    
+    if format_type == "Dongwu": curr_row = render_dongwu(ws, start_dt, end_dt, client_name, product_display_str_dongwu, rows, remarks_list, final_budget_val)
+    elif format_type == "Shenghuo": curr_row = render_shenghuo(ws, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost)
+    else: curr_row = render_bolin(ws, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost)
+
+    if format_type == "Dongwu":
+        curr_row += 1
+        vat = int(round(final_budget_val * 0.05)); grand_total = final_budget_val + vat
+        footer_data = [("製作", prod_cost), ("5% VAT", vat), ("Grand Total", grand_total)]
+        label_col = 6; val_col = 7
+        for label, val in footer_data:
+            ws.row_dimensions[curr_row].height = 30
+            ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center'); ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14)
+            ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = FMT_MONEY; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14)
+            set_border(ws.cell(curr_row, label_col), left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
+            set_border(ws.cell(curr_row, val_col), right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
+            if label == "Grand Total":
+                # Grand Total for Dongwu: No Color, Only Border
+                for c in range(1, 40): set_border(ws.cell(curr_row, c), top=BS_MEDIUM, bottom=BS_MEDIUM)
+            curr_row += 1
+        draw_outer_border(ws, 7, curr_row-1, 1, 39)
+
+    if format_type == "Dongwu":
+        curr_row += 1
+        ws.cell(curr_row, 1).value = "Remarks："
+        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
+        for c in range(1, 40): set_border(ws.cell(curr_row, c), top=None)
+        curr_row += 1
+        for rm in remarks_list:
+            ws.cell(curr_row, 1).value = rm
+            f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
+            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
+            curr_row += 1
+    elif format_type == "Shenghuo":
+        curr_row += 1
+        ws.cell(curr_row, 1).value = "Remarks："
+        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
+        curr_row += 1
+        for rm in remarks_list:
+            ws.cell(curr_row, 1).value = rm
+            f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
+            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
+            curr_row += 1
+    elif format_type == "Bolin":
+        curr_row += 1
+        ws.cell(curr_row, 9).value = "Remarks："
+        ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single")
+        curr_row += 1
+        for rm in remarks_list:
+            ws.cell(curr_row, 9).value = rm
+            ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True)
+            curr_row += 1
+
+    out = io.BytesIO(); wb.save(out); return out.getvalue()
 
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
     eff_days = days_cnt
