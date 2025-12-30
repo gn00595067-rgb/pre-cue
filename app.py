@@ -13,16 +13,21 @@ from datetime import timedelta, datetime, date
 from copy import copy
 import openpyxl
 from openpyxl.utils import get_column_letter, column_index_from_string
-from openpyxl.styles import Alignment, Font, Border, Side, PatternFill, Color
+from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
 
 # =========================================================
-# 0. 初始化 Session State
+# 1. 頁面設定 (必須在所有 st 指令之前)
+# =========================================================
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v92.2")
+
+# =========================================================
+# 2. 初始化 Session State
 # =========================================================
 if "is_supervisor" not in st.session_state:
     st.session_state.is_supervisor = False
 
 # =========================================================
-# 1. 基礎工具
+# 3. 基礎工具
 # =========================================================
 def parse_count_to_int(x):
     if x is None: return 0
@@ -40,12 +45,7 @@ def html_escape(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
 
 # =========================================================
-# 2. 頁面設定
-# =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v92.1")
-
-# =========================================================
-# 3. PDF 策略
+# 4. PDF 策略
 # =========================================================
 def find_soffice_path():
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
@@ -95,7 +95,7 @@ def html_to_pdf_weasyprint(html_str):
     except Exception as e: return None, str(e)
 
 # =========================================================
-# 4. 核心資料設定 (雲端 Google Sheet 版)
+# 5. 核心資料設定 (雲端 Google Sheet 版)
 # =========================================================
 GSHEET_SHARE_URL = "https://docs.google.com/spreadsheets/d/1bzmG-N8XFsj8m3LUPqA8K70AcIqaK4Qhq1VPWcK0w_s/edit?usp=sharing"
 
@@ -201,7 +201,7 @@ def get_remarks_text(sign_deadline, billing_month, payment_date):
     ]
 
 # =========================================================
-# 5. 核心計算函式
+# 6. 核心計算函式
 # =========================================================
 def calculate_plan_data(config, total_budget, days_count):
     rows = []
@@ -304,14 +304,14 @@ def calculate_plan_data(config, total_budget, days_count):
     return rows, total_list_accum, debug_logs
 
 # =========================================================
-# 6. OpenPyXL 規格重建引擎
+# 7. OpenPyXL 規格重建引擎
 # =========================================================
 FONT_MAIN = "微軟正黑體"
 BS_THIN = 'thin'
 BS_MEDIUM = 'medium'
+BS_THICK = 'medium' # Reusing medium as thick per user request
 BS_HAIR = 'hair'
 
-# Helper to safely set borders using string styles
 def set_border(cell, top=None, bottom=None, left=None, right=None):
     cur = cell.border
     t = top if top is not None else (cur.top.style if cur.top else None)
@@ -355,9 +355,7 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     for r, h in ROW_HEIGHTS.items(): ws.row_dimensions[r].height = h
     ws['A1'] = "Media Schedule"; ws.merge_cells("A1:AM1")
     style_range(ws, "A1:AM1", font=Font(name=FONT_MAIN, size=48, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
-    
-    for c in range(1, 40): set_border(ws.cell(3, c), top=BS_MEDIUM)
-    
+    for c in range(1, 40): ws.cell(3, c).border = Border(top=Side(style=BS_MEDIUM))
     info_map = {"A3": ("客戶名稱：", client_name), "A4": ("Product：", product_display_str), "A5": ("Period :", f"{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"), "A6": ("Medium :", "全家廣播/新鮮視/家樂福")}
     for addr, (lbl, val) in info_map.items():
         ws[addr] = lbl; ws[addr].font = Font(name=FONT_MAIN, size=14, bold=True); ws[addr].alignment = Alignment(vertical='center')
@@ -368,7 +366,6 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
         ws[f"{col}7"] = txt; ws.merge_cells(f"{col}7:{col}8")
         style_range(ws, f"{col}7:{col}8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center', wrap_text=True))
         set_border(ws.cell(7, column_index_from_string(col)), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
-
     curr = start_dt; eff_days = (end_dt - start_dt).days + 1
     for i in range(31):
         col_idx = 8 + i; d_cell = ws.cell(7, col_idx); w_cell = ws.cell(8, col_idx)
@@ -380,14 +377,12 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
         d_cell.alignment = w_cell.alignment = Alignment(horizontal='center', vertical='center')
         set_border(d_cell, top=BS_MEDIUM, bottom=BS_THIN, left=BS_THIN, right=BS_THIN)
         set_border(w_cell, top=BS_THIN, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
-
     ws['AM7'] = "檔次"; ws.merge_cells("AM7:AM8")
     style_range(ws, "AM7:AM8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center'))
     set_border(ws['AM7'], top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
-    
     return render_data_rows(ws, rows, 9, final_budget_val, eff_days, "Dongwu", product_display_str)
 
-# ----------------- Shenghuo Engine (No Colors, Infinite) -----------------
+# ----------------- Shenghuo Engine (White BG + Infinite) -----------------
 def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, remarks_list, final_budget_val, prod_cost):
     days_n = (end_dt - start_dt).days + 1
     
@@ -398,7 +393,9 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
     ws.column_dimensions['E'].width = 13.0
     for i in range(days_n): ws.column_dimensions[get_column_letter(6 + i)].width = 13.0
     end_c_start = 6 + days_n
-    ws.column_dimensions[get_column_letter(end_c_start)].width = 13.0; ws.column_dimensions[get_column_letter(end_c_start+1)].width = 59.0; ws.column_dimensions[get_column_letter(end_c_start+2)].width = 13.2 
+    ws.column_dimensions[get_column_letter(end_c_start)].width = 13.0   
+    ws.column_dimensions[get_column_letter(end_c_start+1)].width = 59.0 
+    ws.column_dimensions[get_column_letter(end_c_start+2)].width = 13.2 
     total_cols = 5 + days_n + 3
     ROW_H_MAP = {1:46, 2:46, 3:46, 4:46.5, 5:40, 6:40, 7:40, 8:40}
     for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
@@ -645,6 +642,7 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
             cell = ws.cell(curr_row-1, c)
             set_border(cell, bottom=BS_MEDIUM)
 
+    # Total Row
     ws.row_dimensions[curr_row].height = 40 if mode=="Shenghuo" else 30
     label_col = 6 if mode == "Dongwu" else 5 if mode == "Shenghuo" else 1+5+eff_days+2
     total_val_col = 7 if mode == "Dongwu" else 5+eff_days+3 if mode == "Shenghuo" else 1+5+eff_days+3
