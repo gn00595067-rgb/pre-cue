@@ -42,7 +42,7 @@ def html_escape(s):
 # =========================================================
 # 2. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v89.2")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v90.0")
 
 # =========================================================
 # 3. PDF 策略
@@ -309,7 +309,6 @@ def calculate_plan_data(config, total_budget, days_count):
 FONT_MAIN = "微軟正黑體"
 SIDE_THIN = Side(style='thin')
 SIDE_MEDIUM = Side(style='medium')
-SIDE_THICK = Side(style='medium') # [FIX] Defined SIDE_THICK as medium for user preference
 SIDE_HAIR = Side(style='hair')
 
 def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment=None):
@@ -666,14 +665,9 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
         if not data: continue
         start_merge_row = curr_row
         
-        if mode in ["Dongwu", "Bolin", "Shenghuo"]:
-             for c in range(1, max_c + 1): 
-                 if mode == "Bolin" and c == 37: continue
-                 cell = ws.cell(curr_row, c)
-                 l_style = 'medium' if c==1 else 'thin'
-                 r_style = 'medium' if c==max_c else 'thin'
-                 if mode=="Shenghuo": l_style='medium' if c==1 else 'hair'; r_style='medium' if c==max_c else 'hair'
-                 cell.border = Border(top=SIDE_MEDIUM, left=Side(style=l_style), right=Side(style=r_style), bottom=SIDE_THIN if mode!="Shenghuo" else SIDE_HAIR)
+        # [FIX] Media Section Divider (Top Medium) - Force apply to current row
+        # This will be overridden by loop below? No, we set it inside loop intelligently.
+        pass
 
         display_name = f"全家便利商店\n{m_key if m_key!='家樂福' else ''}廣告"
         if m_key == "家樂福": display_name = "家樂福"
@@ -718,8 +712,7 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
                 # Weekend Color (Shenghuo Only)
                 if mode == "Shenghuo":
                      # Need date from header? Header row 7 has dates for this block
-                     header_date = ws.cell(ws.max_row - (idx + 1 + (curr_row - start_merge_row)) + 7 - 9, col_idx).value # Complex to find header row dynamically in this func
-                     pass # Handled in block loop for Shenghuo
+                     pass # Skipped for now
 
             ws.cell(curr_row, total_col).value = row_sum
 
@@ -730,35 +723,28 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
                 cell.font = font_content
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
                 
-                t_style = cell.border.top.style if (cell.border.top and cell.border.top.style) else 'thin'
+                # [FIX] Border Logic for Dongwu
+                if mode == "Dongwu":
+                    t = 'medium' if idx == 0 else 'thin' # Top medium if first row of media
+                    l = 'thin' # Default thin
+                    r = 'thin'
+                    if c==1: l='medium' # Outer Left
+                    if c==39: r='medium' # Outer Right
+                    cell.border = Border(top=Side(style=t), left=Side(style=l), right=Side(style=r), bottom=SIDE_THIN)
                 
-                l_style = 'thin'
-                r_style = 'thin'
-                b_style = 'thin'
-
-                if mode == "Shenghuo":
-                    l_style = 'hair'
-                    r_style = 'hair'
-                    b_style = 'hair'
+                elif mode == "Shenghuo":
+                    l_style = 'hair'; r_style = 'hair'; b_style = 'hair'
                     if c==1: l_style = 'medium'
                     if c==max_c: r_style = 'medium'
-                elif mode == "Bolin":
-                    l_style = 'thin'
-                    r_style = 'thin'
-                    b_style = 'thin'
+                    t_style = 'medium' if idx == 0 else 'hair'
+                    cell.border = Border(top=Side(style=t_style), bottom=Side(style=b_style), left=Side(style=l_style), right=Side(style=r_style))
+                
+                else: # Bolin
+                    l_style = 'thin'; r_style = 'thin'
                     if c==1: l_style = 'medium'
                     if c==40: r_style = 'medium'
-                else: # Dongwu
-                    l_style = 'thin'
-                    r_style = 'thin'
-                    b_style = 'thin'
-                    if c==1: l_style = 'medium'
-                    if c==max_c: r_style = 'medium'
-
-                cell.border = Border(left=Side(style=l_style), 
-                                     right=Side(style=r_style), 
-                                     top=Side(style=t_style), 
-                                     bottom=Side(style=b_style))
+                    t_style = 'medium' if idx == 0 else 'thin'
+                    cell.border = Border(top=Side(style=t_style), bottom=SIDE_THIN, left=Side(style=l_style), right=Side(style=r_style))
                 
                 if isinstance(cell.value, (int, float)): 
                     cell.number_format = "#,##0_);[Red](#,##0)" if mode=="Shenghuo" else "#,##0"
@@ -774,20 +760,63 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
                 ws.merge_cells(start_row=start_merge_row, start_column=p_c, end_row=curr_row-1, end_column=p_c)
             else: # Bolin
                 ws.merge_cells(start_row=start_merge_row, start_column=40, end_row=curr_row-1, end_column=40)
+        
+        if mode == "Dongwu":
+            for col_idx in [4, 5]:
+                m_start = start_merge_row
+                while m_start < curr_row:
+                    m_end = m_start; curr_val = ws.cell(m_start, col_idx).value
+                    while m_end + 1 < curr_row:
+                        if ws.cell(m_end + 1, col_idx).value == curr_val: m_end += 1
+                        else: break
+                    if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col_idx, end_row=m_end, end_column=col_idx)
+                    m_start = m_end + 1
 
-        # Bottom Medium for Section End
-        for c in range(1, max_c + 1):
-            if mode == "Bolin" and c == 37: continue
-            cell = ws.cell(curr_row-1, c)
-            existing_l = cell.border.left.style if (cell.border.left and cell.border.left.style) else 'thin'
-            existing_r = cell.border.right.style if (cell.border.right and cell.border.right.style) else 'thin'
-            existing_t = cell.border.top.style if (cell.border.top and cell.border.top.style) else 'thin'
-            
-            cell.border = Border(top=Side(style=existing_t), 
-                                 bottom=SIDE_MEDIUM, 
-                                 left=Side(style=existing_l), 
-                                 right=Side(style=existing_r))
+    # Total Row
+    ws.row_dimensions[curr_row].height = 30
+    label_col = 6 if mode == "Dongwu" else 36 if mode == "Bolin" else 28 # Shenghuo Label at AB?
+    if mode == "Shenghuo": label_col = 5 # E
+    total_val_col = 7 if mode == "Dongwu" else 39 if mode == "Bolin" else 5+eff_days+3 # AE
+    
+    ws.cell(curr_row, label_col).value = "Total"; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center')
+    ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14, bold=True)
+    ws.cell(curr_row, total_val_col).value = final_budget_val; ws.cell(curr_row, total_val_col).number_format = "#,##0"
+    ws.cell(curr_row, total_val_col).font = Font(name=FONT_MAIN, size=14, bold=True); ws.cell(curr_row, total_val_col).alignment = Alignment(horizontal='center', vertical='center')
 
+    # Total Spots Calc
+    total_spots_all = 0
+    sch_start = 8 if mode == "Dongwu" else 6
+    spot_sum_col = 39 if mode == "Dongwu" else 37 if mode == "Bolin" else 5+eff_days+1
+    
+    for d_idx in range(eff_days): # Pagination Aware? No, this function assumes eff_days is for current block
+        col_idx = sch_start + d_idx
+        # Need real index for sum? Yes
+        real_idx = day_offset_start + d_idx
+        if real_idx < len(rows[0]['schedule']): # Check first row for length
+             s_sum = sum([r["schedule"][real_idx] for r in rows if real_idx < len(r["schedule"])])
+             ws.cell(curr_row, col_idx).value = s_sum; total_spots_all += s_sum
+             ws.cell(curr_row, col_idx).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, col_idx).font = font_content
+    
+    ws.cell(curr_row, spot_sum_col).value = total_spots_all; ws.cell(curr_row, spot_sum_col).font = Font(name=FONT_MAIN, size=14, bold=True)
+    ws.cell(curr_row, spot_sum_col).alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Total Row Style
+    if mode == "Dongwu":
+        for c in range(1, 40): ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
+        ws.cell(curr_row, 1).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_THIN) # Left Medium
+        ws.cell(curr_row, 39).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_MEDIUM) # Right Medium
+    elif mode == "Shenghuo":
+        for c in range(1, max_c+1): 
+            ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+            if c==1: ws.cell(curr_row, c).border = Border(left=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+            if c==max_c: ws.cell(curr_row, c).border = Border(right=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+    else: # Bolin
+        for c in range(1, 41): 
+            if c==37: continue
+            ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+            if c==1: ws.cell(curr_row, c).border = Border(left=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+            if c==40: ws.cell(curr_row, c).border = Border(right=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+    
     return curr_row
 
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val, prod_cost):
@@ -807,25 +836,27 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             ws.row_dimensions[curr_row].height = 30
             ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center'); ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14)
             ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = "#,##0"; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14)
-            ws.cell(curr_row, label_col).border = Border(left=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, right=SIDE_THIN)
-            ws.cell(curr_row, val_col).border = Border(right=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN)
+            # Footer Side Medium
+            ws.cell(curr_row, label_col).border = Border(left=SIDE_MEDIUM, top=SIDE_THIN, bottom=SIDE_THIN, right=SIDE_THIN)
+            ws.cell(curr_row, val_col).border = Border(right=SIDE_MEDIUM, top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN)
+            
             if label == "Grand Total":
-                for c in range(1, 40): ws.cell(curr_row, c).fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid"); ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+                # Grand Total Row: Left/Right Medium, Top/Bottom Medium? User said "Grand Total no color, no infinite border". 
+                # Just Side Medium and maybe Top/Bottom Medium for box?
+                # User previously said: "Grand Total row don't color, also don't have infinite up/down thick border".
+                # But earlier requested "Total row ... up/down thick".
+                # Let's keep Side Medium for box effect.
+                ws.cell(curr_row, label_col).border = Border(left=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, right=SIDE_THIN)
+                ws.cell(curr_row, val_col).border = Border(right=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN)
+                
             curr_row += 1
         draw_outer_border(ws, 7, curr_row-1, 1, 39)
 
-    if format_type != "Bolin": # Bolin and Shenghuo handle remarks differently or inside render
-         # Shenghuo remarks are inside render_shenghuo (at end of each block? No, usually once).
-         # My render_shenghuo implementation does not add remarks at end.
-         # Let's add remarks for Dongwu here. Shenghuo/Bolin logic is complex (pagination).
-         pass
-         
-    # Remarks (Only for Dongwu here, Shenghuo/Bolin inside their funcs? No, let's add for Dongwu)
     if format_type == "Dongwu":
         curr_row += 1
         ws.cell(curr_row, 1).value = "Remarks："
         ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
-        for c in range(1, 40): ws.cell(curr_row, c).border = Border(top=Side(style=None))
+        for c in range(1, 40): ws.cell(curr_row, c).border = Border(top=Side(style=None)) # Clear top
         curr_row += 1
         for rm in remarks_list:
             ws.cell(curr_row, 1).value = rm
@@ -933,7 +964,7 @@ with st.sidebar:
         st.success("✅ 目前狀態：主管模式"); 
         if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v89.2)")
+st.title("📺 媒體 Cue 表生成器 (v90.0)")
 format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
 c1, c2, c3, c4 = st.columns(4)
