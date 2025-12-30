@@ -1,10 +1,11 @@
 import streamlit as st
 import traceback
+from itertools import groupby
 
 # =========================================================
 # 1. 頁面設定 (必須是程式的第一個有效指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v101.1")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v102.0")
 
 import pandas as pd
 import math
@@ -575,19 +576,37 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     
     tbody = ""; rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
     pkg_tracker = {}
-    for r in rows_sorted:
-        tbody += "<tr>"; rate = f"${r['rate_display']:,}" if isinstance(r['rate_display'], (int, float)) else r['rate_display']
-        if r['is_pkg_member']:
-            p_key = f"{r['media']}_{r['seconds']}_{r['nat_pkg_display']}"
-            if p_key not in pkg_tracker: pkg_val = f"${r['nat_pkg_display']:,}"; pkg_tracker[p_key] = True
-            else: pkg_val = ""
-        else: pkg_val = f"${r['pkg_display']:,}" if isinstance(r['pkg_display'], (int, float)) else r['pkg_display']
+    
+    # Using groupby for Rowspan Logic in HTML
+    for key, group in groupby(rows_sorted, lambda x: (x['media'], x['seconds'], x.get('nat_pkg_display', 0))):
+        g_list = list(group)
+        g_size = len(g_list)
+        is_pkg = g_list[0]['is_pkg_member']
         
-        if format_type == "Shenghuo": sec_txt = f"{r['seconds']}秒"; tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td><td>{rate}</td><td>{pkg_val}</td>"
-        elif format_type == "Bolin": tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}秒</td><td>{rate}</td><td>{pkg_val}</td>"
-        else: tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td><td>{pkg_val}</td>"
-        for d in r['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
-        tbody += "</tr>"
+        for i, r in enumerate(g_list):
+            tbody += "<tr>"
+            rate = f"${r['rate_display']:,}" if isinstance(r['rate_display'], (int, float)) else r['rate_display']
+            
+            # Package Cost Logic
+            pkg_val_str = ""
+            if is_pkg:
+                if i == 0:
+                    val = f"${r['nat_pkg_display']:,}"
+                    pkg_val_str = f"<td class='right' rowspan='{g_size}'>{val}</td>"
+            else:
+                val = f"${r['pkg_display']:,}" if isinstance(r['pkg_display'], (int, float)) else r['pkg_display']
+                pkg_val_str = f"<td class='right'>{val}</td>"
+
+            if format_type == "Shenghuo": 
+                sec_txt = f"{r['seconds']}秒"
+                tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td><td>{rate}</td>{pkg_val_str}"
+            elif format_type == "Bolin": 
+                tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}秒</td><td>{rate}</td>{pkg_val_str}"
+            else: 
+                tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td>{pkg_val_str}"
+            
+            for d in r['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
+            tbody += "</tr>"
         
     remarks_html = "<br>".join([html_escape(x) for x in remarks])
     vat = int(round(budget * 0.05))
@@ -595,7 +614,7 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     return f"<html><head><style>body {{ font-family: sans-serif; font-size: 10px; }} table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }} .bg-dw-head {{ background-color: #4472C4; color: white; }} .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }} .bg-bolin-head {{ background-color: #F8CBAD; color: black; }} .bg-weekend {{ background-color: #FFFFCC; }}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
 
 # =========================================================
-# 9. Main Execution Block (Safety Wrapper)
+# 10. Main Execution Block
 # =========================================================
 def main():
     try:
@@ -618,7 +637,7 @@ def main():
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
         # Main UI
-        st.title("📺 媒體 Cue 表生成器 (v96.1)")
+        st.title("📺 媒體 Cue 表生成器 (v102.0)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
@@ -750,12 +769,14 @@ def main():
             rem = get_remarks_text(sign_deadline, billing_month, payment_date)
             html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
             st.components.v1.html(html_preview, height=700, scrolling=True)
+            
             with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
                 for log in logs:
                     st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
                     if 'Details' in log:
                         for detail in log['Details']: st.info(detail)
                     st.divider()
+            
             col_dl1, col_dl2 = st.columns(2)
             with col_dl2:
                 try:
