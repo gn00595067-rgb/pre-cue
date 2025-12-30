@@ -42,7 +42,7 @@ def html_escape(s):
 # =========================================================
 # 2. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v84.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v85.0")
 
 # =========================================================
 # 3. PDF 策略
@@ -307,8 +307,9 @@ def calculate_plan_data(config, total_budget, days_count):
 # 6. OpenPyXL 規格重建引擎
 # =========================================================
 FONT_MAIN = "微軟正黑體"
+# [FIX] Border Styles
 SIDE_THIN = Side(style='thin')
-SIDE_THICK = Side(style='thick')
+SIDE_THICK = Side(style='medium') # Adjusted to 'medium' per request (thinner than 'thick' but bolder than 'thin')
 SIDE_MEDIUM = Side(style='medium')
 
 def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment=None):
@@ -328,10 +329,25 @@ def apply_borders(ws, range_string, style='thin'):
         for c in range(min_col, max_col + 1):
             ws.cell(r, c).border = border
 
-# ----------------- Dongwu Engine -----------------
+def draw_outer_border(ws, min_r, max_r, min_c, max_c):
+    """Draws a thick box around the specified rectangular area, preserving inner borders."""
+    for r in range(min_r, max_r + 1):
+        for c in range(min_c, max_c + 1):
+            cell = ws.cell(r, c)
+            new_border = copy(cell.border)
+            
+            top = SIDE_THICK if r == min_r else new_border.top
+            bottom = SIDE_THICK if r == max_r else new_border.bottom
+            left = SIDE_THICK if c == min_c else new_border.left
+            right = SIDE_THICK if c == max_c else new_border.right
+            
+            cell.border = Border(top=top, bottom=bottom, left=left, right=right)
+
+# ----------------- Dongwu Engine (Final Polish) -----------------
 def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
     COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
     ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
+    
     for k, v in COL_WIDTHS.items(): ws.column_dimensions[k].width = v
     for i in range(8, 40): ws.column_dimensions[get_column_letter(i)].width = 8.5
     ws.column_dimensions['AM'].width = 13.0
@@ -340,10 +356,11 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     ws['A1'] = "Media Schedule"; ws.merge_cells("A1:AM1")
     style_range(ws, "A1:AM1", font=Font(name=FONT_MAIN, size=48, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
     
-    # Client Row Border
+    # [FIX] Row 3 Thick Top
     for c in range(1, 40): 
         cell = ws.cell(3, c)
-        cell.border = Border(top=SIDE_THICK, bottom=cell.border.bottom, left=cell.border.left, right=cell.border.right)
+        existing = copy(cell.border)
+        cell.border = Border(top=SIDE_THICK, bottom=existing.bottom, left=existing.left, right=existing.right)
 
     info_map = {"A3": ("客戶名稱：", client_name), "A4": ("Product：", product_display_str), "A5": ("Period :", f"{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"), "A6": ("Medium :", "全家廣播/新鮮視/家樂福")}
     for addr, (lbl, val) in info_map.items():
@@ -362,6 +379,9 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
         col_idx = 8 + i; d_cell = ws.cell(7, col_idx); w_cell = ws.cell(8, col_idx)
         if i < eff_days:
             d_cell.value = curr; d_cell.number_format = 'm/d'; w_cell.value = ["一","二","三","四","五","六","日"][curr.weekday()]
+            # [FIX] Header Weekend Color
+            if curr.weekday() >= 5: 
+                d_cell.fill = w_cell.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
             curr += timedelta(days=1)
         d_cell.font = Font(name=FONT_MAIN, size=12); w_cell.font = Font(name=FONT_MAIN, size=12)
         d_cell.alignment = w_cell.alignment = Alignment(horizontal='center', vertical='center')
@@ -479,6 +499,7 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
                 if d_idx < len(sch):
                     cell.value = sch[d_idx]; row_sum += sch[d_idx]
                 
+                # [FIX] Weekend Color for Body
                 if mode == "Dongwu" and d_idx < eff_days:
                      header_cell = ws.cell(7, col_idx)
                      if header_cell.value and isinstance(header_cell.value, (datetime, date)):
@@ -502,6 +523,7 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
             if mode == "Dongwu": ws.merge_cells(start_row=start_merge_row, start_column=7, end_row=curr_row-1, end_column=7)
             else: ws.merge_cells(start_row=start_merge_row, start_column=39, end_row=curr_row-1, end_column=39)
         
+        # Dongwu Sub-merge
         if mode == "Dongwu":
             for col_idx in [4, 5]:
                 m_start = start_merge_row
@@ -513,7 +535,8 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
                     if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col_idx, end_row=m_end, end_column=col_idx)
                     m_start = m_end + 1
 
-    ws.row_dimensions[curr_row].height = 30
+    # Total Row
+    ws.row_dimensions[curr_row].height = 30 # 30 Height
     label_col = 6 if mode == "Dongwu" else 36; total_val_col = 7 if mode == "Dongwu" else 39
     
     ws.cell(curr_row, label_col).value = "Total"; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center')
@@ -528,13 +551,16 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
         ws.cell(curr_row, col_idx).value = daily_sum; total_spots_all += daily_sum
         ws.cell(curr_row, col_idx).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, col_idx).font = font_content
     
+    # [FIX] Total Spots Style
     ws.cell(curr_row, total_spot_col).value = total_spots_all; ws.cell(curr_row, total_spot_col).font = Font(name=FONT_MAIN, size=14, bold=True)
-    ws.cell(curr_row, total_spot_col).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, total_spot_col).border = Border(right=SIDE_THICK, top=SIDE_THICK, bottom=SIDE_THICK)
+    ws.cell(curr_row, total_spot_col).alignment = Alignment(horizontal='center', vertical='center')
     
     if mode == "Dongwu":
         for c in range(1, 40): 
-            r_side = SIDE_THICK if c == 39 else SIDE_THIN
-            ws.cell(curr_row, c).border = Border(top=SIDE_THICK, bottom=SIDE_THICK, right=r_side, left=SIDE_THIN)
+             # Top/Bottom Thick
+             ws.cell(curr_row, c).border = Border(top=SIDE_THICK, bottom=SIDE_THICK, left=SIDE_THIN, right=SIDE_THIN)
+        # Fix AM col right
+        ws.cell(curr_row, 39).border = Border(top=SIDE_THICK, bottom=SIDE_THICK, left=SIDE_THIN, right=SIDE_THICK)
     else:
         for c in range(1, 40): ws.cell(curr_row, c).fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
     
@@ -554,25 +580,40 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     label_col = 6 if format_type == "Dongwu" else 36; val_col = 7 if format_type == "Dongwu" else 39
     
     for label, val in footer_data:
-        ws.row_dimensions[curr_row].height = 30
+        ws.row_dimensions[curr_row].height = 30 # [FIX] Height 30
         ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center')
         ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14 if format_type=="Dongwu" else 12)
         ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = "#,##0"; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center')
         ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14 if format_type=="Dongwu" else 12)
         
-        if format_type == "Dongwu":
+        if format_type == "Dongwu": 
              ws.cell(curr_row, label_col).border = Border(left=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, right=SIDE_THIN)
              ws.cell(curr_row, val_col).border = Border(right=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN)
+             if label == "Grand Total":
+                  # No fill, but ensure surrounding borders look nice? User said "Grand Total no color, no infinite border"
+                  # Just keep the side thick borders
+                  pass
         elif label == "Grand Total":
-            for c in range(1, 40): ws.cell(curr_row, c).fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid"); ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+            grand_fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid")
+            for c in range(1, 40): ws.cell(curr_row, c).fill = grand_fill; ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
         curr_row += 1
+
+    # [FIX] Draw Outer Border for Dongwu (A7 to End)
+    if format_type == "Dongwu":
+        draw_outer_border(ws, 7, curr_row-1, 1, 39) # From header start to last footer row
 
     curr_row += 1
     ws.cell(curr_row, 1).value = "Remarks："
-    ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="FF0000")
+    ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000") # [FIX] Black
+    # [FIX] Remarks Top Border
+    for c in range(1, 40): ws.cell(curr_row, c).border = Border(top=SIDE_THICK)
+    
     curr_row += 1
     for rm in remarks_list:
-        ws.cell(curr_row, 1).value = rm; ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14)
+        ws.cell(curr_row, 1).value = rm
+        # [FIX] Color Logic
+        f_color = "FF0000" if rm.strip().startswith("1.") or rm.strip().startswith("4.") else "000000"
+        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
         curr_row += 1
 
     out = io.BytesIO(); wb.save(out); return out.getvalue()
@@ -675,7 +716,7 @@ with st.sidebar:
         st.success("✅ 目前狀態：主管模式"); 
         if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v84.0)")
+st.title("📺 媒體 Cue 表生成器 (v85.0)")
 format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
 c1, c2, c3, c4 = st.columns(4)
