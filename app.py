@@ -42,7 +42,7 @@ def html_escape(s):
 # =========================================================
 # 2. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v90.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v91.0")
 
 # =========================================================
 # 3. PDF 策略
@@ -309,6 +309,7 @@ def calculate_plan_data(config, total_budget, days_count):
 FONT_MAIN = "微軟正黑體"
 SIDE_THIN = Side(style='thin')
 SIDE_MEDIUM = Side(style='medium')
+SIDE_THICK = Side(style='medium') # Reusing medium as thick for consistency
 SIDE_HAIR = Side(style='hair')
 
 def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment=None):
@@ -339,7 +340,7 @@ def draw_outer_border(ws, min_r, max_r, min_c, max_c):
             right = SIDE_MEDIUM if c == max_c else new_border.right
             cell.border = Border(top=top, bottom=bottom, left=left, right=right)
 
-# ----------------- Dongwu Engine -----------------
+# ----------------- Dongwu Engine (No changes, stable) -----------------
 def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
     COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
     ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
@@ -374,280 +375,221 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     style_range(ws, "AM7:AM8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center'), border=Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN))
     return render_data_rows(ws, rows, 9, final_budget_val, eff_days, "Dongwu")
 
-# ----------------- Shenghuo Engine (Pixel Perfect Remake) -----------------
+# ----------------- Shenghuo Engine (Dynamic Cols) -----------------
 def render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val, prod_cost):
-    DAYS_PER_BLOCK = 23
-    total_days = (end_dt - start_dt).days + 1
-    blocks = math.ceil(total_days / DAYS_PER_BLOCK)
+    days_n = (end_dt - start_dt).days + 1
     
-    COL_WIDTHS_FIXED = [22.5, 24.5, 13.8, 19.4, 13.0] + [13.0]*DAYS_PER_BLOCK + [13.0, 59.0, 13.2] # A-E + 23 Dates + End(3)
-    for i, w in enumerate(COL_WIDTHS_FIXED): ws.column_dimensions[get_column_letter(i+1)].width = w
+    # 1. Config Cols
+    # Fixed: A=22.5, B=24.5, C=13.8, D=19.4, E=13
+    ws.column_dimensions['A'].width = 22.5
+    ws.column_dimensions['B'].width = 24.5
+    ws.column_dimensions['C'].width = 13.8
+    ws.column_dimensions['D'].width = 19.4
+    ws.column_dimensions['E'].width = 13.0
     
-    curr_row = 1
+    # Date Cols (F to ...)
+    for i in range(days_n):
+        col_letter = get_column_letter(6 + i)
+        ws.column_dimensions[col_letter].width = 13.0
     
-    for b in range(blocks):
-        block_start_idx = b * DAYS_PER_BLOCK
-        block_end_idx = min(block_start_idx + DAYS_PER_BLOCK, total_days)
-        block_days = block_end_idx - block_start_idx
-        block_start_dt = start_dt + timedelta(days=block_start_idx)
-        block_end_dt = start_dt + timedelta(days=block_end_idx - 1)
-        
-        # Row Heights for this block
-        for r in range(curr_row, curr_row+8): 
-            h = 46 if r-curr_row < 3 else 46.5 if r-curr_row == 3 else 40
-            ws.row_dimensions[r].height = h
-        
-        # Header Content
-        ws.cell(curr_row+2, 1).value = "聲活數位科技股份有限公司 統編 28710100"
-        ws.cell(curr_row+2, 1).font = Font(name=FONT_MAIN, size=20)
-        ws.cell(curr_row+3, 1).value = "蔡伊閔"
-        ws.cell(curr_row+3, 1).font = Font(name=FONT_MAIN, size=16)
+    # End Cols (3 cols after dates)
+    end_c_start = 6 + days_n
+    ws.column_dimensions[get_column_letter(end_c_start)].width = 13.0   # Spots
+    ws.column_dimensions[get_column_letter(end_c_start+1)].width = 59.0 # List
+    ws.column_dimensions[get_column_letter(end_c_start+2)].width = 13.2 # Net
+    
+    total_cols = 5 + days_n + 3
 
-        # Info Row 5-6 (Relative)
-        r5 = curr_row + 4; r6 = curr_row + 5
-        grey = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-        max_c = 5 + block_days + 3
-        
-        for r in [r5, r6]:
-            for c in range(1, max_c + 1):
-                cell = ws.cell(r, c); cell.fill = grey; cell.font = Font(name=FONT_MAIN, size=14, bold=True)
-                top = SIDE_MEDIUM if r==r5 else Side(); bottom = SIDE_MEDIUM if r==r6 else Side()
-                left = SIDE_MEDIUM if c==1 else Side(); right = SIDE_MEDIUM if c==max_c else Side()
-                cell.border = Border(top=top, bottom=bottom, left=left, right=right)
+    # Row Heights
+    ROW_H_MAP = {1:46, 2:46, 3:46, 4:46.5, 5:40, 6:40, 7:40, 8:40}
+    for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
+    
+    # 2. Header Content
+    ws['A3'] = "聲活數位科技股份有限公司 統編 28710100"
+    ws['A3'].font = Font(name=FONT_MAIN, size=20); ws['A3'].alignment = Alignment(vertical='center')
+    ws['A4'] = "蔡伊閔"
+    ws['A4'].font = Font(name=FONT_MAIN, size=16); ws['A4'].alignment = Alignment(vertical='center')
 
-        ws.cell(r5, 1).value = "客戶名稱："; ws.cell(r5, 2).value = client_name
-        ws.cell(r5, 6).value = "廣告規格："; ws.cell(r5, 8).value = "20秒/15秒"
-        # Date Range
-        dr_col = max_c - 1
-        ws.cell(r5, dr_col).value = f"執行期間：: {start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"
-        ws.cell(r5, dr_col).alignment = Alignment(horizontal='right')
+    # Row 5-6 Info (Grey)
+    grey_fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    
+    for r in [5, 6]:
+        for c in range(1, total_cols + 1):
+            cell = ws.cell(r, c)
+            cell.fill = grey_fill
+            cell.font = Font(name=FONT_MAIN, size=14, bold=True)
+            top = SIDE_MEDIUM if r==5 else Side()
+            bottom = SIDE_MEDIUM if r==6 else Side()
+            left = SIDE_MEDIUM if c==1 else Side()
+            right = SIDE_MEDIUM if c==total_cols else Side()
+            cell.border = Border(top=top, bottom=bottom, left=left, right=right)
 
-        ws.cell(r6, 1).value = "廣告名稱："; ws.cell(r6, 2).value = product_display_str
-        
-        # Month Labels
-        ws.cell(r6, 6).value = f"{block_start_dt.month}月"
-        for i in range(block_days):
-            d = block_start_dt + timedelta(days=i)
-            if d.month != block_start_dt.month and d.day == 1:
-                ws.cell(r6, 6+i).value = f"{d.month}月"
+    ws['A5'] = "客戶名稱："; ws['B5'] = client_name
+    ws['F5'] = "廣告規格："; ws['H5'] = "20秒/15秒"
+    # Date Range at 2nd last col (List Price Col)
+    date_range_col = total_cols - 1
+    ws.cell(5, date_range_col).value = f"執行期間：: {start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"
+    ws.cell(5, date_range_col).alignment = Alignment(horizontal='right', vertical='center')
 
-        # Table Header Row 7-8 (Relative)
-        r7 = curr_row + 6; r8 = curr_row + 7
-        headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]; header_blue = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
-        for i, h in enumerate(headers):
-            ws.merge_cells(start_row=r7, start_column=i+1, end_row=r8, end_column=i+1)
-            cell = ws.cell(r7, i+1); cell.value = h
-            style_range(ws, f"{get_column_letter(i+1)}{r7}:{get_column_letter(i+1)}{r8}", font=Font(name=FONT_MAIN, size=14, bold=True), alignment=Alignment(horizontal='center', vertical='center', wrap_text=True), fill=header_blue, border=Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR))
-        
-        ws.cell(r7,1).border = Border(top=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_HAIR)
-        ws.cell(r8,1).border = Border(bottom=SIDE_HAIR, left=SIDE_MEDIUM, right=SIDE_HAIR)
+    ws['A6'] = "廣告名稱："; ws['B6'] = product_display_str
+    
+    # Month Labels
+    ws.cell(6, 6).value = f"{start_dt.month}月"
+    for i in range(days_n):
+        d = start_dt + timedelta(days=i)
+        if d.month != start_dt.month and d.day == 1:
+            ws.cell(6, 6+i).value = f"{d.month}月"
 
-        curr_d = block_start_dt
-        for i in range(block_days):
-            c = 6 + i
-            cell7 = ws.cell(r7, c); cell7.value = curr_d; cell7.number_format = 'd'; cell7.fill = header_blue
-            cell7.font = Font(name=FONT_MAIN, size=14, bold=True); cell7.alignment = Alignment(horizontal='center', vertical='center')
-            cell7.border = Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR)
-            
-            cell8 = ws.cell(r8, c); cell8.value = f'=MID("日一二三四五六",WEEKDAY({get_column_letter(c)}{r7},1),1)'
-            cell8.font = Font(name=FONT_MAIN, size=14, bold=True); cell8.alignment = Alignment(horizontal='center', vertical='center')
-            cell8.border = Border(top=SIDE_HAIR, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR)
-            curr_d += timedelta(days=1)
+    # Row 7 & 8 (Table Header)
+    headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
+    header_blue = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
+    
+    for i, h in enumerate(headers):
+        ws.merge_cells(start_row=7, start_column=i+1, end_row=8, end_column=i+1)
+        cell = ws.cell(7, i+1); cell.value = h
+        style_range(ws, f"{get_column_letter(i+1)}7:{get_column_letter(i+1)}8", 
+                    font=Font(name=FONT_MAIN, size=14, bold=True), 
+                    alignment=Alignment(horizontal='center', vertical='center', wrap_text=True),
+                    fill=header_blue,
+                    border=Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR))
+    
+    # A7 Left Medium
+    ws.cell(7,1).border = Border(top=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_HAIR)
+    ws.cell(8,1).border = Border(bottom=SIDE_HAIR, left=SIDE_MEDIUM, right=SIDE_HAIR)
 
-        end_headers = ["檔次", "定價", "專案價"]
-        end_c_start = 6 + block_days
-        for i, h in enumerate(end_headers):
-            c = end_c_start + i
-            ws.merge_cells(start_row=r7, start_column=c, end_row=r8, end_column=c); ws.cell(r7, c).value = h
-            style_range(ws, f"{get_column_letter(c)}{r7}:{get_column_letter(c)}{r8}", font=Font(name=FONT_MAIN, size=14, bold=True), alignment=Alignment(horizontal='center', vertical='center'), fill=header_blue, border=Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR))
-        ws.cell(r7, max_c).border = Border(top=SIDE_MEDIUM, right=SIDE_MEDIUM, left=SIDE_HAIR); ws.cell(r8, max_c).border = Border(bottom=SIDE_HAIR, right=SIDE_MEDIUM, left=SIDE_HAIR)
+    # Date Cols
+    curr = start_dt
+    for i in range(days_n):
+        c = 6 + i
+        cell7 = ws.cell(7, c); cell7.value = curr; cell7.number_format = 'd'
+        cell7.fill = header_blue
+        cell7.font = Font(name=FONT_MAIN, size=14, bold=True); cell7.alignment = Alignment(horizontal='center', vertical='center')
+        cell7.border = Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR)
+        
+        cell8 = ws.cell(8, c); cell8.value = f'=MID("日一二三四五六",WEEKDAY({get_column_letter(c)}7,1),1)'
+        cell8.font = Font(name=FONT_MAIN, size=14, bold=True); cell8.alignment = Alignment(horizontal='center', vertical='center')
+        cell8.border = Border(top=SIDE_HAIR, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR)
+        
+        curr += timedelta(days=1)
 
-        # Render Data Rows for this block
-        curr_row = render_data_rows(ws, rows, r8+1, final_budget_val, block_days, "Shenghuo", block_start_idx)
-        
-        # Total Row
-        ws.row_dimensions[curr_row].height = 40
-        ws.cell(curr_row, 5).value = "Total"; ws.cell(curr_row, 5).alignment = Alignment(horizontal='right', vertical='center')
-        ws.cell(curr_row, 5).font = Font(name=FONT_MAIN, size=14, bold=True)
-        # Daily Sums
-        total_spots_block = 0
-        for d_idx in range(block_days):
-            col_idx = 6 + d_idx
-            real_day_idx = block_start_idx + d_idx
-            s_sum = sum([r["schedule"][real_day_idx] for r in rows if real_day_idx < len(r["schedule"])])
-            ws.cell(curr_row, col_idx).value = s_sum; total_spots_block += s_sum
-            ws.cell(curr_row, col_idx).number_format = "#,##0_);[Red](#,##0)"
-            ws.cell(curr_row, col_idx).font = Font(name=FONT_MAIN, size=14, bold=True); ws.cell(curr_row, col_idx).alignment = Alignment(horizontal='center', vertical='center')
-        
-        ws.cell(curr_row, 5+block_days+1).value = total_spots_block # Spots
-        if b == blocks - 1: # Only last block shows Money
-             ws.cell(curr_row, 5+block_days+3).value = final_budget_val
+    # End Cols
+    end_headers = ["檔次", "定價", "專案價"]
+    for i, h in enumerate(end_headers):
+        c = end_c_start + i
+        ws.merge_cells(start_row=7, start_column=c, end_row=8, end_column=c)
+        ws.cell(7, c).value = h
+        style_range(ws, f"{get_column_letter(c)}7:{get_column_letter(c)}8",
+                    font=Font(name=FONT_MAIN, size=14, bold=True),
+                    alignment=Alignment(horizontal='center', vertical='center'),
+                    fill=header_blue,
+                    border=Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR))
+    
+    # Last Col Right Medium
+    ws.cell(7, total_cols).border = Border(top=SIDE_MEDIUM, right=SIDE_MEDIUM, left=SIDE_HAIR)
+    ws.cell(8, total_cols).border = Border(bottom=SIDE_HAIR, right=SIDE_MEDIUM, left=SIDE_HAIR)
 
-        # Total Style
-        for c in range(1, max_c + 1):
-             cell = ws.cell(curr_row, c)
-             cell.font = Font(name=FONT_MAIN, size=14, bold=True)
-             l = SIDE_MEDIUM if c==1 else SIDE_HAIR; r = SIDE_MEDIUM if c==max_c else SIDE_HAIR
-             cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=l, right=r)
-        
-        curr_row += 1
-        
-        # Footer
-        show_money = (b == blocks - 1)
-        vat = int(round(final_budget_val * 0.05)); grand_total = final_budget_val + vat
-        
-        footer_data = [("製作", prod_cost if show_money else ""), ("5% VAT", vat if show_money else ""), ("Grand Total", grand_total if show_money else "")]
-        label_col = 5 + block_days + 2 # Rate Col (2nd last)
-        val_col = 5 + block_days + 3 # Total Col (Last)
-        
-        for label, val in footer_data:
-            ws.row_dimensions[curr_row].height = 30
-            ws.cell(curr_row, label_col).value = label
-            ws.cell(curr_row, val_col).value = val
-            # Style
-            for c in range(label_col, val_col + 1):
-                cell = ws.cell(curr_row, c)
-                l = SIDE_MEDIUM if c==label_col else SIDE_HAIR; r = SIDE_MEDIUM if c==val_col else SIDE_HAIR
-                cell.border = Border(left=l, right=r, top=SIDE_HAIR, bottom=SIDE_HAIR)
-                cell.font = Font(name=FONT_MAIN, size=14, bold=True)
-                cell.alignment = Alignment(horizontal='right' if c==label_col else 'center', vertical='center')
-                if isinstance(val, (int,float)) and c==val_col: cell.number_format = "#,##0_);[Red](#,##0)"
-            curr_row += 1
-            
-        curr_row += 2 # Spacer for next block
+    return render_data_rows(ws, rows, 9, final_budget_val, days_n, "Shenghuo")
 
-    return curr_row
-
-# ----------------- Bolin Engine (Pagination) -----------------
+# ----------------- Bolin Engine (Dynamic Cols + B Start) -----------------
 def render_bolin(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val, prod_cost):
-    DAYS_PER_BLOCK = 31
-    total_days = (end_dt - start_dt).days + 1
-    blocks = math.ceil(total_days / DAYS_PER_BLOCK)
+    days_n = (end_dt - start_dt).days + 1
+    total_cols = 1 + 5 + days_n + 3 # Spacer(A) + Fixed(B-F) + Dates + End(3)
     
-    # Col Widths (Fixed)
-    COL_WIDTHS_FIXED = [20, 22, 10, 15, 10] + [5]*31 + [2, 8, 12, 12] # A-E + 31 Dates + Space(AK) + AL/AM/AN
-    for i, w in enumerate(COL_WIDTHS_FIXED): ws.column_dimensions[get_column_letter(i+1)].width = w
+    # Col Widths
+    ws.column_dimensions['A'].width = 1.76 # Spacer
+    ws.column_dimensions['B'].width = 20
+    ws.column_dimensions['C'].width = 22
+    ws.column_dimensions['D'].width = 10
+    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['F'].width = 10
     
-    curr_row = 1
+    # Date Cols (G to ...)
+    for i in range(days_n):
+        col_letter = get_column_letter(7 + i)
+        ws.column_dimensions[col_letter].width = 5
+        
+    # End Cols
+    end_c_start = 7 + days_n
+    ws.column_dimensions[get_column_letter(end_c_start)].width = 8
+    ws.column_dimensions[get_column_letter(end_c_start+1)].width = 12
+    ws.column_dimensions[get_column_letter(end_c_start+2)].width = 12
+
+    # Row Heights
+    # Bolin doesn't use A1 huge title anymore
+    ROW_H_MAP = {1:15, 2:25, 3:25, 4:25, 5:25, 6:25, 7:35} # Row 1 spacer? No, start from Row 2 data?
+    # Spec says: A3, A4... wait, start from B3/B4.
+    # Let's map Rows 3-6 as Header Info.
+    for r in range(1, 8): ws.row_dimensions[r].height = 25
+    ws.row_dimensions[7].height = 35 # Header
+
+    # Meta Info (Left Labels at B, Values at C)
+    # TO
+    ws['B2'] = "TO："; ws['B2'].font = Font(name=FONT_MAIN, size=13, bold=True); ws['B2'].alignment = Alignment(horizontal='right')
+    ws['C2'] = client_name; ws['C2'].font = Font(name=FONT_MAIN, size=13)
     
-    for b in range(blocks):
-        block_start_idx = b * DAYS_PER_BLOCK
-        block_end_idx = min(block_start_idx + DAYS_PER_BLOCK, total_days)
-        block_days = block_end_idx - block_start_idx
-        block_start_dt = start_dt + timedelta(days=block_start_idx)
-        
-        # Row Heights
-        ws.row_dimensions[curr_row].height = 60
-        for r in range(curr_row+1, curr_row+6): ws.row_dimensions[r].height = 25
-        ws.row_dimensions[curr_row+6].height = 35
+    # FROM
+    ws['B3'] = "FROM："; ws['B3'].font = Font(name=FONT_MAIN, size=13, bold=True); ws['B3'].alignment = Alignment(horizontal='right')
+    ws['C3'] = "鉑霖行動行銷 許雅婷 TINA"; ws['C3'].font = Font(name=FONT_MAIN, size=13)
+    
+    # Client
+    ws['B4'] = "客戶名稱："; ws['B4'].font = Font(name=FONT_MAIN, size=13, bold=True); ws['B4'].alignment = Alignment(horizontal='right')
+    ws['C4'] = client_name; ws['C4'].font = Font(name=FONT_MAIN, size=13)
+    
+    # Product
+    ws['B5'] = "廣告名稱："; ws['B5'].font = Font(name=FONT_MAIN, size=13, bold=True); ws['B5'].alignment = Alignment(horizontal='right')
+    ws['C5'] = product_display_str; ws['C5'].font = Font(name=FONT_MAIN, size=13)
 
-        # Header
-        ws.merge_cells(start_row=curr_row, start_column=1, end_row=curr_row, end_column=40)
-        ws.cell(curr_row, 1).value = "Media Schedule"
-        style_range(ws, f"A{curr_row}:AN{curr_row}", font=Font(name=FONT_MAIN, size=42, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
+    # Right Side Info
+    # Spec: G4
+    ws['G4'] = "廣告規格："; ws['G4'].font = Font(name=FONT_MAIN, size=13, bold=True)
+    ws['H4'] = "20秒/15秒"; ws['H4'].font = Font(name=FONT_MAIN, size=13)
+    
+    # Date Range at End-1
+    dr_lbl_col = end_c_start + 1 # End col is Total Price, so maybe shift left?
+    # Use explicit col for date range? Let's put it near end.
+    # Spec said "AE4" in fixed 31 layout. Dynamic: End-1 works.
+    date_lbl_col = total_cols - 2
+    date_val_col = total_cols - 1
+    ws.cell(4, date_lbl_col).value = "執行期間："; ws.cell(4, date_lbl_col).font = Font(name=FONT_MAIN, size=13, bold=True)
+    ws.cell(4, date_val_col).value = f"{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"; ws.cell(4, date_val_col).font = Font(name=FONT_MAIN, size=13)
 
-        # Meta
-        r2=curr_row+1
-        ws.cell(r2, 1).value = "TO："; ws.cell(r2, 2).value = client_name
-        ws.cell(r2+1, 1).value = "FROM："; ws.cell(r2+1, 2).value = "鉑霖行動行銷 許雅婷 TINA"
-        ws.cell(r2+2, 1).value = "客戶名稱："; ws.cell(r2+2, 2).value = client_name
-        ws.cell(r2+3, 1).value = "廣告名稱："; ws.cell(r2+3, 2).value = product_display_str
-        
-        ws.cell(r2+2, 7).value = "廣告規格："; ws.cell(r2+2, 8).value = "20秒/15秒"
-        ws.cell(r2+2, 31).value = "執行期間："; ws.cell(r2+2, 32).value = f"{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
+    # Row 7 Table Header
+    header_fill = PatternFill(start_color="F8CBAD", end_color="F8CBAD", fill_type="solid")
+    
+    # Fixed Cols B-F
+    headers = ["頻道", "播出地區", "播出店數", "播出時間", "規格"]
+    for i, h in enumerate(headers):
+        c = 2 + i # Start B=2
+        cell = ws.cell(7, c); cell.value = h
+        cell.fill = header_fill
+        cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
+        if c==2: cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_THIN)
 
-        for r in range(curr_row+1, curr_row+6):
-            for c in [1, 7, 31]: ws.cell(r, c).font = Font(name=FONT_MAIN, size=13, bold=True); ws.cell(r, c).alignment = Alignment(horizontal='right')
-            for c in [2, 8, 32]: ws.cell(r, c).font = Font(name=FONT_MAIN, size=13)
+    # Date Cols
+    curr = start_dt
+    for i in range(days_n):
+        c = 7 + i
+        cell = ws.cell(7, c); cell.value = curr; cell.number_format = 'm/d'
+        cell.fill = header_fill
+        cell.font = Font(name=FONT_MAIN, size=10, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
+        curr += timedelta(days=1)
 
-        # Row 7 (Table Header)
-        r7 = curr_row + 6
-        header_fill = PatternFill(start_color="F8CBAD", end_color="F8CBAD", fill_type="solid")
-        
-        headers = ["頻道", "播出地區", "播出店數", "播出時間", "規格"]
-        for i, h in enumerate(headers):
-            cell = ws.cell(r7, i+1); cell.value = h
-            cell.fill = header_fill; cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
-            cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            if i==0: cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_THIN)
+    # End Cols
+    end_h = ["總檔次", "單價", "金額"]
+    for i, h in enumerate(end_h):
+        c = end_c_start + i
+        cell = ws.cell(7, c); cell.value = h
+        cell.fill = header_fill
+        cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center')
+        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
+        if i==2: cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_MEDIUM)
 
-        curr_d = block_start_dt
-        for i in range(31):
-            c = 6 + i
-            cell = ws.cell(r7, c)
-            if i < block_days:
-                cell.value = curr_d; cell.number_format = 'm/d'; curr_d += timedelta(days=1)
-            cell.fill = header_fill; cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
-            cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center')
+    return render_data_rows(ws, rows, 8, final_budget_val, days_n, "Bolin")
 
-        # End Cols (AL=38, AM=39, AN=40)
-        end_h = [(38, "總檔次"), (39, "單價"), (40, "金額")]
-        for c, txt in end_h:
-            cell = ws.cell(r7, c); cell.value = txt
-            cell.fill = header_fill; cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
-            cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center')
-            if c==40: cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_MEDIUM)
-
-        # Data Rows
-        curr_row = render_data_rows(ws, rows, r7+1, final_budget_val, block_days, "Bolin", block_start_idx)
-
-        # Total Row
-        ws.row_dimensions[curr_row].height = 30
-        ws.cell(curr_row, 39).value = "Total"; ws.cell(curr_row, 39).font = Font(name=FONT_MAIN, size=12, bold=True)
-        if b == blocks - 1:
-            ws.cell(curr_row, 40).value = final_budget_val; ws.cell(curr_row, 40).number_format = "#,##0"
-        
-        # Daily Sums
-        total_spots_block = 0
-        for i in range(block_days):
-            col_idx = 6 + i
-            real_idx = block_start_idx + i
-            s_sum = sum([r["schedule"][real_idx] for r in rows if real_idx < len(r["schedule"])])
-            ws.cell(curr_row, col_idx).value = s_sum; total_spots_block += s_sum
-        ws.cell(curr_row, 38).value = total_spots_block
-
-        for c in range(1, 41):
-            if c == 37: continue
-            cell = ws.cell(curr_row, c)
-            cell.font = Font(name=FONT_MAIN, size=12, bold=True)
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            l_style = 'medium' if c==1 else 'thin'
-            r_style = 'medium' if c==40 else 'thin'
-            cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=Side(style=l_style), right=Side(style=r_style))
-        
-        curr_row += 1
-        
-        # Footer
-        show_money = (b == blocks - 1)
-        vat = int(round(final_budget_val * 0.05)); grand = final_budget_val + vat
-        items = [("製作", prod_cost if show_money else ""), ("5% VAT", vat if show_money else ""), ("Grand Total", grand if show_money else "")]
-        
-        for label, val in items:
-            ws.row_dimensions[curr_row].height = 30
-            ws.cell(curr_row, 39).value = label
-            ws.cell(curr_row, 40).value = val
-            
-            for c in range(5, 41): # Box E to AN
-                if c == 37: continue
-                cell = ws.cell(curr_row, c)
-                cell.font = Font(name=FONT_MAIN, size=12, bold=True)
-                cell.alignment = Alignment(horizontal='center', vertical='center')
-                if c == 39: cell.alignment = Alignment(horizontal='right', vertical='center')
-                l_style = 'medium' if c==5 else 'thin'
-                r_style = 'medium' if c==40 else 'thin'
-                cell.border = Border(left=Side(style=l_style), right=Side(style=r_style), top=SIDE_THIN, bottom=SIDE_THIN)
-                
-                if label == "Grand Total":
-                    cell.fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid")
-                    cell.border = Border(left=Side(style=l_style), right=Side(style=r_style), top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-            curr_row += 1
-        
-        curr_row += 2 # Spacer
-
-    return curr_row
-
-# Common Data Renderer (Pagination Aware)
-def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_offset_start=0):
+# Common Data Renderer
+def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
     curr_row = start_row
     font_content = Font(name=FONT_MAIN, size=14 if mode in ["Dongwu","Shenghuo"] else 12)
     row_height = 40 if mode in ["Dongwu","Shenghuo"] else 25
@@ -658,16 +600,22 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
         "家樂福": sorted([r for r in rows if r["media"] == "家樂福"], key=lambda x: x["seconds"]),
     }
 
-    max_c = 40 if mode == "Bolin" else 39 if mode == "Dongwu" else 5 + eff_days + 3
-    if mode == "Bolin": max_c = 40 # Fixed
+    # Define Max Col based on mode
+    if mode == "Dongwu": max_c = 39
+    elif mode == "Shenghuo": max_c = 5 + eff_days + 3
+    else: max_c = 1 + 5 + eff_days + 3 # Bolin
 
     for m_key, data in grouped_data.items():
         if not data: continue
         start_merge_row = curr_row
         
-        # [FIX] Media Section Divider (Top Medium) - Force apply to current row
-        # This will be overridden by loop below? No, we set it inside loop intelligently.
-        pass
+        # Section Top Border (Medium)
+        start_c = 1 if mode != "Bolin" else 2
+        for c in range(start_c, max_c + 1):
+            cell = ws.cell(curr_row, c)
+            l = SIDE_MEDIUM if c==start_c else SIDE_THIN if mode != "Shenghuo" else SIDE_HAIR
+            r = SIDE_MEDIUM if c==max_c else SIDE_THIN if mode != "Shenghuo" else SIDE_HAIR
+            cell.border = Border(top=SIDE_MEDIUM, left=Side(style=l), right=Side(style=r), bottom=SIDE_THIN if mode!="Shenghuo" else SIDE_HAIR)
 
         display_name = f"全家便利商店\n{m_key if m_key!='家樂福' else ''}廣告"
         if m_key == "家樂福": display_name = "家樂福"
@@ -677,11 +625,13 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
         for idx, r_data in enumerate(data):
             ws.row_dimensions[curr_row].height = row_height
             
-            ws.cell(curr_row, 1).value = display_name
-            ws.cell(curr_row, 2).value = r_data["region"]
-            ws.cell(curr_row, 3).value = int(r_data.get("program_num", 0))
-            ws.cell(curr_row, 4).value = r_data["daypart"]
-            ws.cell(curr_row, 5).value = f"{r_data['seconds']}秒"
+            # Fixed Cols
+            base_c = 1 if mode != "Bolin" else 2
+            ws.cell(curr_row, base_c).value = display_name
+            ws.cell(curr_row, base_c+1).value = r_data["region"]
+            ws.cell(curr_row, base_c+2).value = int(r_data.get("program_num", 0))
+            ws.cell(curr_row, base_c+3).value = r_data["daypart"]
+            ws.cell(curr_row, base_c+4).value = f"{r_data['seconds']}秒"
             
             rate_val = r_data["rate_display"]; pkg_val = r_data["pkg_display"]
             if r_data.get("is_pkg_member") and idx == 0: pkg_val = r_data["nat_pkg_display"]
@@ -696,70 +646,60 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
                 ws.cell(curr_row, 5+eff_days+3).value = pkg_val
                 total_col = 5+eff_days+1
             else: # Bolin
-                sch_start_col = 6
-                ws.cell(curr_row, 39).value = rate_val 
-                ws.cell(curr_row, 40).value = pkg_val 
-                total_col = 38 
+                sch_start_col = 7
+                ws.cell(curr_row, 1+5+eff_days+2).value = rate_val 
+                ws.cell(curr_row, 1+5+eff_days+3).value = pkg_val 
+                total_col = 1+5+eff_days+1
 
             sch = r_data["schedule"]; row_sum = 0
             for d_idx in range(eff_days): 
                 col_idx = sch_start_col + d_idx
-                real_idx = day_offset_start + d_idx
-                if real_idx < len(sch):
-                    val = sch[real_idx]
+                if d_idx < len(sch):
+                    val = sch[d_idx]
                     ws.cell(curr_row, col_idx).value = val; row_sum += val
                 
                 # Weekend Color (Shenghuo Only)
                 if mode == "Shenghuo":
-                     # Need date from header? Header row 7 has dates for this block
-                     pass # Skipped for now
+                     # Shenghuo header is Row 7
+                     header_date = ws.cell(7, col_idx).value
+                     if isinstance(header_date, (datetime, date)) and header_date.weekday() >= 5:
+                         ws.cell(curr_row, col_idx).fill = PatternFill(start_color="FFFFD966", end_color="FFFFD966", fill_type="solid")
 
             ws.cell(curr_row, total_col).value = row_sum
 
             # Styles
-            for c in range(1, max_c + 1):
-                if mode == "Bolin" and c == 37: continue
+            for c in range(start_c, max_c + 1):
                 cell = ws.cell(curr_row, c)
                 cell.font = font_content
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
                 
-                # [FIX] Border Logic for Dongwu
-                if mode == "Dongwu":
-                    t = 'medium' if idx == 0 else 'thin' # Top medium if first row of media
-                    l = 'thin' # Default thin
-                    r = 'thin'
-                    if c==1: l='medium' # Outer Left
-                    if c==39: r='medium' # Outer Right
-                    cell.border = Border(top=Side(style=t), left=Side(style=l), right=Side(style=r), bottom=SIDE_THIN)
+                t_style = cell.border.top.style if (cell.border.top and cell.border.top.style) else 'thin'
                 
-                elif mode == "Shenghuo":
+                l_style = 'thin'; r_style = 'thin'; b_style = 'thin'
+                if mode == "Shenghuo":
                     l_style = 'hair'; r_style = 'hair'; b_style = 'hair'
-                    if c==1: l_style = 'medium'
+                    if c==start_c: l_style = 'medium'
                     if c==max_c: r_style = 'medium'
-                    t_style = 'medium' if idx == 0 else 'hair'
-                    cell.border = Border(top=Side(style=t_style), bottom=Side(style=b_style), left=Side(style=l_style), right=Side(style=r_style))
-                
-                else: # Bolin
-                    l_style = 'thin'; r_style = 'thin'
-                    if c==1: l_style = 'medium'
-                    if c==40: r_style = 'medium'
-                    t_style = 'medium' if idx == 0 else 'thin'
-                    cell.border = Border(top=Side(style=t_style), bottom=SIDE_THIN, left=Side(style=l_style), right=Side(style=r_style))
+                elif mode == "Bolin":
+                    if c==start_c: l_style = 'medium'
+                    if c==max_c: r_style = 'medium'
+                else: # Dongwu
+                    if c==start_c: l_style = 'medium'
+                    if c==max_c: r_style = 'medium'
+
+                cell.border = Border(left=Side(style=l_style), right=Side(style=r_style), top=Side(style=t_style), bottom=Side(style=b_style))
                 
                 if isinstance(cell.value, (int, float)): 
                     cell.number_format = "#,##0_);[Red](#,##0)" if mode=="Shenghuo" else "#,##0"
             curr_row += 1
 
         if curr_row > start_merge_row:
-            ws.merge_cells(start_row=start_merge_row, start_column=1, end_row=curr_row-1, end_column=1)
+            ws.merge_cells(start_row=start_merge_row, start_column=start_c, end_row=curr_row-1, end_column=start_c)
         
+        # Merge Package Cost
         if data[0].get("is_pkg_member"):
-            if mode == "Dongwu": ws.merge_cells(start_row=start_merge_row, start_column=7, end_row=curr_row-1, end_column=7)
-            elif mode == "Shenghuo": 
-                p_c = 5+eff_days+3
-                ws.merge_cells(start_row=start_merge_row, start_column=p_c, end_row=curr_row-1, end_column=p_c)
-            else: # Bolin
-                ws.merge_cells(start_row=start_merge_row, start_column=40, end_row=curr_row-1, end_column=40)
+            p_c = 7 if mode == "Dongwu" else (5+eff_days+3) if mode == "Shenghuo" else (1+5+eff_days+3)
+            ws.merge_cells(start_row=start_merge_row, start_column=p_c, end_row=curr_row-1, end_column=p_c)
         
         if mode == "Dongwu":
             for col_idx in [4, 5]:
@@ -772,50 +712,53 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
                     if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col_idx, end_row=m_end, end_column=col_idx)
                     m_start = m_end + 1
 
+        # Bottom Medium for Section End
+        for c in range(start_c, max_c + 1):
+            cell = ws.cell(curr_row-1, c)
+            existing_l = cell.border.left.style if (cell.border.left and cell.border.left.style) else 'thin'
+            existing_r = cell.border.right.style if (cell.border.right and cell.border.right.style) else 'thin'
+            existing_t = cell.border.top.style if (cell.border.top and cell.border.top.style) else 'thin'
+            
+            cell.border = Border(top=Side(style=existing_t), bottom=SIDE_MEDIUM, left=Side(style=existing_l), right=Side(style=existing_r))
+
     # Total Row
-    ws.row_dimensions[curr_row].height = 30
-    label_col = 6 if mode == "Dongwu" else 36 if mode == "Bolin" else 28 # Shenghuo Label at AB?
-    if mode == "Shenghuo": label_col = 5 # E
-    total_val_col = 7 if mode == "Dongwu" else 39 if mode == "Bolin" else 5+eff_days+3 # AE
+    ws.row_dimensions[curr_row].height = 40 if mode=="Shenghuo" else 30
+    
+    label_col = 6 if mode == "Dongwu" else 5 if mode == "Shenghuo" else 1+5+eff_days+2 # Bolin Total at AM(End-1)?
+    # Bolin Spec: "Total" in AM (End-1), Value in AN (End)
+    
+    total_val_col = 7 if mode == "Dongwu" else 5+eff_days+3 if mode == "Shenghuo" else 1+5+eff_days+3
     
     ws.cell(curr_row, label_col).value = "Total"; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center')
-    ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14, bold=True)
+    ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14 if mode!="Bolin" else 12, bold=True)
     ws.cell(curr_row, total_val_col).value = final_budget_val; ws.cell(curr_row, total_val_col).number_format = "#,##0"
-    ws.cell(curr_row, total_val_col).font = Font(name=FONT_MAIN, size=14, bold=True); ws.cell(curr_row, total_val_col).alignment = Alignment(horizontal='center', vertical='center')
+    ws.cell(curr_row, total_val_col).font = Font(name=FONT_MAIN, size=14 if mode!="Bolin" else 12, bold=True); ws.cell(curr_row, total_val_col).alignment = Alignment(horizontal='center', vertical='center')
 
-    # Total Spots Calc
+    # Daily Sums
     total_spots_all = 0
-    sch_start = 8 if mode == "Dongwu" else 6
-    spot_sum_col = 39 if mode == "Dongwu" else 37 if mode == "Bolin" else 5+eff_days+1
+    sch_start = 8 if mode == "Dongwu" else 6 if mode == "Shenghuo" else 7
+    spot_sum_col = 39 if mode == "Dongwu" else 5+eff_days+1 if mode == "Shenghuo" else 1+5+eff_days+1
     
-    for d_idx in range(eff_days): # Pagination Aware? No, this function assumes eff_days is for current block
+    for d_idx in range(eff_days):
         col_idx = sch_start + d_idx
-        # Need real index for sum? Yes
-        real_idx = day_offset_start + d_idx
-        if real_idx < len(rows[0]['schedule']): # Check first row for length
-             s_sum = sum([r["schedule"][real_idx] for r in rows if real_idx < len(r["schedule"])])
-             ws.cell(curr_row, col_idx).value = s_sum; total_spots_all += s_sum
-             ws.cell(curr_row, col_idx).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, col_idx).font = font_content
+        s_sum = sum([r["schedule"][d_idx] for r in rows if d_idx < len(r["schedule"])])
+        ws.cell(curr_row, col_idx).value = s_sum; total_spots_all += s_sum
+        ws.cell(curr_row, col_idx).number_format = "#,##0_);[Red](#,##0)" if mode=="Shenghuo" else "#,##0"
+        ws.cell(curr_row, col_idx).font = Font(name=FONT_MAIN, size=14 if mode!="Bolin" else 12, bold=True)
+        ws.cell(curr_row, col_idx).alignment = Alignment(horizontal='center', vertical='center')
     
-    ws.cell(curr_row, spot_sum_col).value = total_spots_all; ws.cell(curr_row, spot_sum_col).font = Font(name=FONT_MAIN, size=14, bold=True)
+    ws.cell(curr_row, spot_sum_col).value = total_spots_all; ws.cell(curr_row, spot_sum_col).font = Font(name=FONT_MAIN, size=14 if mode!="Bolin" else 12, bold=True)
     ws.cell(curr_row, spot_sum_col).alignment = Alignment(horizontal='center', vertical='center')
     
     # Total Row Style
-    if mode == "Dongwu":
-        for c in range(1, 40): ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
-        ws.cell(curr_row, 1).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_THIN) # Left Medium
-        ws.cell(curr_row, 39).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_MEDIUM) # Right Medium
-    elif mode == "Shenghuo":
-        for c in range(1, max_c+1): 
-            ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-            if c==1: ws.cell(curr_row, c).border = Border(left=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-            if c==max_c: ws.cell(curr_row, c).border = Border(right=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-    else: # Bolin
-        for c in range(1, 41): 
-            if c==37: continue
-            ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-            if c==1: ws.cell(curr_row, c).border = Border(left=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-            if c==40: ws.cell(curr_row, c).border = Border(right=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+    start_c = 1 if mode != "Bolin" else 2
+    for c in range(start_c, max_c + 1):
+        cell = ws.cell(curr_row, c)
+        l = SIDE_MEDIUM if c==start_c else SIDE_THIN if mode!="Shenghuo" else SIDE_HAIR
+        r = SIDE_MEDIUM if c==max_c else SIDE_THIN if mode!="Shenghuo" else SIDE_HAIR
+        if mode == "Bolin": l = SIDE_MEDIUM if c==start_c else SIDE_THIN; r = SIDE_MEDIUM if c==max_c else SIDE_THIN
+        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=Side(style=l), right=Side(style=r))
+        if mode == "Dongwu" and c==1: cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_THIN) # Dongwu Left
     
     return curr_row
 
@@ -836,19 +779,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             ws.row_dimensions[curr_row].height = 30
             ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center'); ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14)
             ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = "#,##0"; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14)
-            # Footer Side Medium
-            ws.cell(curr_row, label_col).border = Border(left=SIDE_MEDIUM, top=SIDE_THIN, bottom=SIDE_THIN, right=SIDE_THIN)
-            ws.cell(curr_row, val_col).border = Border(right=SIDE_MEDIUM, top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN)
-            
+            ws.cell(curr_row, label_col).border = Border(left=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, right=SIDE_THIN)
+            ws.cell(curr_row, val_col).border = Border(right=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN)
             if label == "Grand Total":
-                # Grand Total Row: Left/Right Medium, Top/Bottom Medium? User said "Grand Total no color, no infinite border". 
-                # Just Side Medium and maybe Top/Bottom Medium for box?
-                # User previously said: "Grand Total row don't color, also don't have infinite up/down thick border".
-                # But earlier requested "Total row ... up/down thick".
-                # Let's keep Side Medium for box effect.
-                ws.cell(curr_row, label_col).border = Border(left=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, right=SIDE_THIN)
-                ws.cell(curr_row, val_col).border = Border(right=SIDE_MEDIUM, top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN)
-                
+                for c in range(1, 40): ws.cell(curr_row, c).fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid"); ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
             curr_row += 1
         draw_outer_border(ws, 7, curr_row-1, 1, 39)
 
@@ -856,12 +790,34 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         curr_row += 1
         ws.cell(curr_row, 1).value = "Remarks："
         ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
-        for c in range(1, 40): ws.cell(curr_row, c).border = Border(top=Side(style=None)) # Clear top
+        for c in range(1, 40): ws.cell(curr_row, c).border = Border(top=Side(style=None))
         curr_row += 1
         for rm in remarks_list:
             ws.cell(curr_row, 1).value = rm
             f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
             ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
+            curr_row += 1
+    elif format_type == "Shenghuo":
+        curr_row += 1
+        ws.cell(curr_row, 1).value = "Remarks："
+        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
+        curr_row += 1
+        for rm in remarks_list:
+            ws.cell(curr_row, 1).value = rm
+            f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
+            ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color)
+            curr_row += 1
+    elif format_type == "Bolin":
+        curr_row += 1
+        ws.cell(curr_row, 2).value = "Remarks：" # I col in original (9), here B=2? No, I is 9.
+        # Original spec said "Remarks at I". But here we have dynamic cols.
+        # Let's put at B.
+        ws.cell(curr_row, 9).value = "Remarks：" # I
+        ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single")
+        curr_row += 1
+        for rm in remarks_list:
+            ws.cell(curr_row, 9).value = rm
+            ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True)
             curr_row += 1
 
     out = io.BytesIO(); wb.save(out); return out.getvalue()
@@ -964,7 +920,7 @@ with st.sidebar:
         st.success("✅ 目前狀態：主管模式"); 
         if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v90.0)")
+st.title("📺 媒體 Cue 表生成器 (v91.0)")
 format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
 c1, c2, c3, c4 = st.columns(4)
