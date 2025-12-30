@@ -4,7 +4,7 @@ import traceback
 # =========================================================
 # 1. 頁面設定 (必須是程式的第一個有效指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v99.2")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v99.3")
 
 import pandas as pd
 import math
@@ -23,7 +23,7 @@ from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill, Color
 
 # =========================================================
-# 2. 全域常數 (Global Constants) - [FIX] Moved URL here
+# 2. 全域常數 (Global Constants)
 # =========================================================
 GSHEET_SHARE_URL = "https://docs.google.com/spreadsheets/d/1bzmG-N8XFsj8m3LUPqA8K70AcIqaK4Qhq1VPWcK0w_s/edit?usp=sharing"
 
@@ -507,22 +507,20 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             set_border(ws.cell(curr_row, label_col), left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
             set_border(ws.cell(curr_row, val_col), right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
             if label == "Grand Total":
-                for c in range(1, 40): ws.cell(curr_row, c).fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid"); set_border(ws.cell(curr_row, c), top=BS_MEDIUM, bottom=BS_MEDIUM)
+                for c in range(1, 40): set_border(ws.cell(curr_row, c), top=BS_MEDIUM, bottom=BS_MEDIUM)
             curr_row += 1
         draw_outer_border(ws, 7, curr_row-1, 1, 39)
 
     # Remarks
     if format_type == "Dongwu":
-        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："
-        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
+        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："; ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
         for c in range(1, 40): set_border(ws.cell(curr_row, c), top=None)
         curr_row += 1
         for rm in remarks_list:
             ws.cell(curr_row, 1).value = rm; f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
             ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, color=f_color); curr_row += 1
     elif format_type == "Shenghuo":
-        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："
-        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
+        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："; ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
         curr_row += 1
         for rm in remarks_list:
             ws.cell(curr_row, 1).value = rm; f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
@@ -537,21 +535,18 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     out = io.BytesIO(); wb.save(out); return out.getvalue()
 
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
-    # Re-implemented HTML Preview with Infinite Scroll & New Medium Logic
     eff_days = days_cnt
     header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
     if format_type == "Bolin": header_cls = "bg-bolin-head"
-
     date_th1 = ""; date_th2 = ""; curr = start_dt; weekdays = ["一", "二", "三", "四", "五", "六", "日"]
     for i in range(eff_days):
         wd = curr.weekday(); bg = "bg-weekend" if wd >= 5 else ""
         date_th1 += f"<th class='{header_cls} col_day'>{curr.day}</th>"; date_th2 += f"<th class='{bg} col_day'>{weekdays[wd]}</th>"; curr += timedelta(days=1)
-
     cols_def = ["Station", "Location", "Program", "Day-part", "Size", "rate<br>(Net)", "Package-cost<br>(Net)"]
     if format_type == "Shenghuo": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "秒數/規格", "單價", "金額"]
     elif format_type == "Bolin": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "規格", "單價", "金額"]
-
     th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
+    
     unique_media = sorted(list(set([r['media'] for r in rows]))); medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
     
     tbody = ""; rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
@@ -576,7 +571,7 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     return f"<html><head><style>body {{ font-family: sans-serif; font-size: 10px; }} table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }} .bg-dw-head {{ background-color: #4472C4; color: white; }} .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }} .bg-bolin-head {{ background-color: #F8CBAD; color: black; }} .bg-weekend {{ background-color: #FFFFCC; }}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
 
 # =========================================================
-# 9. Main Execution Block (Safety Wrapper)
+# 10. Main Execution Block (Safety Wrapper)
 # =========================================================
 def main():
     try:
