@@ -42,7 +42,7 @@ def html_escape(s):
 # =========================================================
 # 2. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v80.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v80.1")
 
 # =========================================================
 # 3. PDF 策略
@@ -186,7 +186,7 @@ def get_remarks_text(sign_deadline, billing_month, payment_date):
     ]
 
 # =========================================================
-# 5. 核心計算函式 (Fix Debug & Logic)
+# 5. 核心計算函式 (Detailed Debug Version)
 # =========================================================
 def calculate_plan_data(config, total_budget, days_count):
     rows = []
@@ -519,6 +519,7 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
         total_spots_all += daily_sum
         ws.cell(curr_row, col_idx).alignment = Alignment(horizontal='center', vertical='center')
     
+    # [FIX] Total Spots Style
     ws.cell(curr_row, total_spot_col).value = total_spots_all
     ws.cell(curr_row, total_spot_col).font = Font(name=FONT_MAIN, size=14, bold=True)
     ws.cell(curr_row, total_spot_col).alignment = Alignment(horizontal='center', vertical='center')
@@ -567,7 +568,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=12)
         ws.cell(curr_row, val_col).value = val
         ws.cell(curr_row, val_col).number_format = "#,##0"
-        ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center')
+        ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center') # [FIX] Center
         ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=12)
         
         if label == "Grand Total":
@@ -591,6 +592,125 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     return out.getvalue()
 
 # =========================================================
+# 6. HTML Preview
+# =========================================================
+def load_font_base64():
+    font_path = "NotoSansTC-Regular.ttf"
+    if os.path.exists(font_path):
+        with open(font_path, "rb") as f: return base64.b64encode(f.read()).decode("utf-8")
+    url = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/TTF/TraditionalChinese/NotoSansTC-Regular.ttf"
+    try:
+        r = requests.get(url, timeout=15)
+        if r.status_code == 200:
+            with open(font_path, "wb") as f: f.write(r.content)
+            return base64.b64encode(r.content).decode("utf-8")
+    except: pass
+    return None
+
+def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
+    header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
+    eff_days = min(days_cnt, 31)
+    
+    font_b64 = load_font_base64()
+    font_face = f"@font-face {{ font-family: 'NotoSansTC'; src: url(data:font/ttf;base64,{font_b64}) format('truetype'); }}" if font_b64 else ""
+
+    date_th1, date_th2 = "", ""
+    curr = start_dt
+    weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+    for i in range(eff_days):
+        wd = curr.weekday()
+        bg = "bg-weekend" if (format_type == "Dongwu" and wd >= 5) else header_cls
+        if format_type == "Shenghuo": bg = header_cls 
+        date_th1 += f"<th class='{bg} col_day'>{curr.day}</th>"
+        date_th2 += f"<th class='{bg} col_day'>{weekdays[wd]}</th>"
+        curr += timedelta(days=1)
+
+    if format_type == "Dongwu":
+        cols_def = ["Station", "Location", "Program", "Day-part", "Size", "rate<br>(Net)", "Package-cost<br>(Net)"]
+    else:
+        cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "秒數<br>規格", "專案價<br>(Net)"]
+    th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
+    
+    rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
+    tbody = ""
+    
+    grouped_rows = {}
+    for r in rows_sorted:
+        key = (r['media'], r['seconds'])
+        grouped_rows.setdefault(key, []).append(r)
+
+    for (m, sec), group in grouped_rows.items():
+        is_nat = group[0].get('is_pkg_member', False)
+        group_size = len(group)
+        for k, r_data in enumerate(group):
+            tbody += "<tr>"
+            if k == 0:
+                display_name = "全家便利商店<br>通路廣播廣告" if m == "全家廣播" else "全家便利商店<br>新鮮視廣告" if m == "新鮮視" else "家樂福"
+                if format_type == "Shenghuo" and m == "全家廣播": display_name = "全家便利商店<br>廣播通路廣告"
+                tbody += f"<td class='left' rowspan='{group_size}'>{display_name}</td>"
+
+            loc_txt = region_display(r_data['region'])
+            tbody += f"<td>{loc_txt}</td><td class='right'>{r_data.get('program_num','')}</td><td>{r_data['daypart']}</td>"
+            sec_txt = f"{r_data['seconds']}秒"
+            tbody += f"<td>{sec_txt}</td>"
+            rate = f"{r_data['rate_display']:,}" if isinstance(r_data['rate_display'], int) else r_data['rate_display']
+            pkg = f"{r_data['pkg_display']:,}" if isinstance(r_data['pkg_display'], int) else r_data['pkg_display']
+            
+            tbody += f"<td class='right'>{rate}</td>"
+            if is_nat:
+                if k == 0:
+                    nat_pkg = f"{r_data['nat_pkg_display']:,}"
+                    tbody += f"<td class='right' rowspan='{group_size}'>{nat_pkg}</td>"
+            else:
+                tbody += f"<td class='right'>{pkg}</td>"
+            
+            for d in r_data['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
+            tbody += f"<td class='bg-total'>{r_data['spots']}</td></tr>"
+
+    totals = [sum([r["schedule"][d] for r in rows if d < len(r["schedule"])]) for d in range(eff_days)]
+    colspan = 5
+    empty_td = "<td></td>" if format_type == "Dongwu" else ""
+    tfoot = f"<tr class='bg-total'><td colspan='{colspan}' class='right'>Total (List Price)</td>{empty_td}<td class='right'>{total_list:,}</td>"
+    for t in totals: tfoot += f"<td>{t}</td>"
+    tfoot += f"<td>{sum(totals)}</td></tr>"
+
+    vat = int(round(budget * 0.05))
+    
+    footer_rows = f"<tr><td colspan='6' class='right'>製作</td><td class='right'>{prod:,}</td><td colspan='{eff_days+1}'></td></tr>"
+    footer_rows += f"<tr><td colspan='6' class='right'>專案優惠價 (Budget)</td><td class='right' style='color:red; font-weight:bold;'>{budget:,}</td><td colspan='{eff_days+1}'></td></tr>"
+    footer_rows += f"<tr><td colspan='6' class='right'>5% VAT</td><td class='right'>{vat:,}</td><td colspan='{eff_days+1}'></td></tr>"
+    footer_rows += f"<tr class='bg-grand'><td colspan='6' class='right'>Grand Total</td><td class='right'>{grand_total:,}</td><td colspan='{eff_days+1}'></td></tr>"
+
+    html_content = f"""
+    <html><head><style>
+    {font_face}
+    body {{ font-family: 'NotoSansTC', sans-serif !important; font-size: 10px; }}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th, td {{ border: 0.5pt solid #000; padding: 2px; text-align: center; white-space: nowrap; }}
+    .bg-dw-head {{ background-color: #4472C4; color: white; -webkit-print-color-adjust: exact; }}
+    .bg-sh-head {{ background-color: #BDD7EE; color: black; -webkit-print-color-adjust: exact; }}
+    .bg-weekend {{ background-color: #FFD966; -webkit-print-color-adjust: exact; }}
+    .bg-total   {{ background-color: #E2EFDA; -webkit-print-color-adjust: exact; }}
+    .bg-grand   {{ background-color: #FFC107; -webkit-print-color-adjust: exact; }}
+    .left {{ text-align: left; }}
+    .right {{ text-align: right; }}
+    .remarks {{ margin-top: 10px; font-size: 9px; text-align: left; white-space: pre-wrap; }}
+    </style></head><body>
+    <div style="margin-bottom:10px;">
+        <div style="font-size:16px; font-weight:bold; text-align:center;">Media Schedule</div>
+        <b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br>
+        <b>Period：</b>{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')} &nbsp; <b>Medium：</b>全家廣播/新鮮視/家樂福
+    </div>
+    <table>
+        <thead><tr>{th_fixed}{date_th1}<th class='{header_cls}' rowspan='2'>檔次</th></tr><tr>{date_th2}</tr></thead>
+        <tbody>{tbody}{tfoot}{footer_rows}</tbody>
+    </table>
+    <div class="remarks"><b>Remarks：</b><br>{"<br>".join([html_escape(x) for x in remarks])}</div>
+    </body></html>
+    """
+    return html_content
+
+# =========================================================
 # 7. UI Main
 # =========================================================
 with st.sidebar:
@@ -609,7 +729,7 @@ with st.sidebar:
             st.session_state.is_supervisor = False
             st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v80.0)")
+st.title("📺 媒體 Cue 表生成器 (v80.1)")
 
 st.markdown("### 1. 選擇格式")
 format_type = st.radio("", ["Dongwu", "Shenghuo"], horizontal=True)
@@ -770,8 +890,7 @@ if is_cf:
 if config:
     rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count)
     
-    # [FIX] Vars
-    prod_cost = prod_cost_input
+    prod_cost = prod_cost_input # Unified variable
     vat = int(round(final_budget_val * 0.05))
     grand_total = final_budget_val + vat
     
