@@ -42,7 +42,7 @@ def html_escape(s):
 # =========================================================
 # 2. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v82.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v83.0")
 
 # =========================================================
 # 3. PDF 策略
@@ -69,6 +69,7 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
             xlsx_path = os.path.join(tmp, "cue.xlsx")
             with open(xlsx_path, "wb") as f: f.write(xlsx_bytes)
             
+            # 使用 LibreOffice 轉檔
             subprocess.run([
                 soffice, "--headless", "--nologo", "--convert-to", "pdf:calc_pdf_Export", 
                 "--outdir", tmp, xlsx_path
@@ -122,6 +123,7 @@ def load_config_from_cloud(share_url):
             if row['Media'] not in sec_factors: sec_factors[row['Media']] = {}
             sec_factors[row['Media']][int(row['Seconds'])] = float(row['Factor'])
         
+        # 名稱對應修正
         name_map = {"全家新鮮視": "新鮮視", "全家廣播": "全家廣播", "家樂福": "家樂福"}
         for k, v in name_map.items():
             if k in sec_factors and v not in sec_factors:
@@ -176,6 +178,7 @@ def get_sec_factor(media_type, seconds):
     
     if not factors: return 1.0
     if seconds in factors: return factors[seconds]
+    # 自動推算權重
     for base in [10, 20, 15, 30]:
         if base in factors: return (seconds / base) * factors[base]
     return 1.0
@@ -310,6 +313,7 @@ FONT_MAIN = "微軟正黑體"
 SIDE_THIN = Side(style='thin')
 SIDE_THICK = Side(style='thick')
 SIDE_MEDIUM = Side(style='medium')
+SIDE_HAIR = Side(style='hair')
 
 def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment=None):
     rows = list(ws[cell_range])
@@ -328,24 +332,24 @@ def apply_borders(ws, range_string, style='thin'):
         for c in range(min_col, max_col + 1):
             ws.cell(r, c).border = border
 
-# ----------------- Dongwu Engine -----------------
+# ----------------- Dongwu Engine (Customized) -----------------
 def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
-    # Dongwu Config
     COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
     ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
     
-    # 1. Widths & Heights
     for k, v in COL_WIDTHS.items(): ws.column_dimensions[k].width = v
-    for i in range(8, 40): ws.column_dimensions[get_column_letter(i)].width = 8.5 # [FIX] H-AL width 8.5
+    for i in range(8, 40): ws.column_dimensions[get_column_letter(i)].width = 8.5 # H-AL 8.5
     ws.column_dimensions['AM'].width = 13.0
     for r, h in ROW_HEIGHTS.items(): ws.row_dimensions[r].height = h
 
-    # 2. Header
     ws['A1'] = "Media Schedule"; ws.merge_cells("A1:AM1")
     style_range(ws, "A1:AM1", font=Font(name=FONT_MAIN, size=48, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
     
-    # [FIX] Client Name Row (3) Thick Top Border
-    for c in range(1, 40): ws.cell(3, c).border = Border(top=SIDE_THICK)
+    # Client Name Row Top Thick
+    for c in range(1, 40): 
+        cell = ws.cell(3, c)
+        existing = copy(cell.border)
+        cell.border = Border(top=SIDE_THICK, bottom=existing.bottom, left=existing.left, right=existing.right)
 
     info_map = {"A3": ("客戶名稱：", client_name), "A4": ("Product：", product_display_str), "A5": ("Period :", f"{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"), "A6": ("Medium :", "全家廣播/新鮮視/家樂福")}
     for addr, (lbl, val) in info_map.items():
@@ -354,7 +358,6 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
 
     ws['H6'] = f"{start_dt.month}月"; ws['H6'].font = Font(name=FONT_MAIN, size=16, bold=True); ws['H6'].alignment = Alignment(horizontal='center', vertical='center')
 
-    # 3. Table Header (Thick Top/Bottom)
     headers = [("A","Station"), ("B","Location"), ("C","Program"), ("D","Day-part"), ("E","Size"), ("F","rate\n(Net)"), ("G","Package-cost\n(Net)")]
     for col, txt in headers:
         ws[f"{col}7"] = txt; ws.merge_cells(f"{col}7:{col}8")
@@ -376,7 +379,7 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
 
     return render_data_rows(ws, rows, 9, final_budget_val, eff_days, "Dongwu")
 
-# ----------------- Shenghuo Engine -----------------
+# ----------------- Shenghuo & Bolin -----------------
 def render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
     COL_WIDTHS = {'A': 20, 'B': 22, 'C': 10, 'D': 15, 'E': 10, 'F': 5}
     ROW_HEIGHTS = {1: 50, 2: 25, 3: 20, 4: 20, 5: 20, 6: 35}
@@ -384,40 +387,26 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows
     for i in range(7, 38): ws.column_dimensions[get_column_letter(i)].width = 5
     ws.column_dimensions['AL'].width = 8; ws.column_dimensions['AM'].width = 12; ws.column_dimensions['AN'].width = 12
     for r, h in ROW_HEIGHTS.items(): ws.row_dimensions[r].height = h
-    
     ws['A1'] = "Media Schedule"; ws.merge_cells("A1:AN1")
     style_range(ws, "A1:AN1", font=Font(name=FONT_MAIN, size=40, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
-    
     info_map = {"A3": ("客戶名稱：", client_name), "A4": ("廣告名稱：", product_display_str), "G4": ("廣告規格：", "20秒/15秒"), "AE4": ("執行期間：", f"{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}")}
     for addr, (lbl, val) in info_map.items():
         ws[addr] = lbl; ws[addr].font = Font(name=FONT_MAIN, size=12, bold=True); ws[addr].alignment = Alignment(vertical='center')
         val_cell = ws.cell(ws[addr].row, ws[addr].column + 1); val_cell.value = val; val_cell.font = Font(name=FONT_MAIN, size=12); val_cell.alignment = Alignment(vertical='center')
-
     headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
     for i, h in enumerate(headers):
         cell = ws.cell(6, i+1); cell.value = h
-        cell.font = Font(name=FONT_MAIN, size=13, bold=True)
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        cell.fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
-        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-
+        cell.font = Font(name=FONT_MAIN, size=13, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); cell.fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid"); cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
     curr = start_dt; eff_days = (end_dt - start_dt).days + 1
     for i in range(31):
         col_idx = 6 + i; cell = ws.cell(6, col_idx)
-        if i < eff_days:
-            cell.value = curr; cell.number_format = 'm/d'; curr += timedelta(days=1)
-        cell.font = Font(name=FONT_MAIN, size=10); cell.alignment = Alignment(horizontal='center', vertical='center')
-        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-    
+        if i < eff_days: cell.value = curr; cell.number_format = 'm/d'; curr += timedelta(days=1)
+        cell.font = Font(name=FONT_MAIN, size=10); cell.alignment = Alignment(horizontal='center', vertical='center'); cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
     for i, h in enumerate(["檔次", "定價", "專案價"]):
         cell = ws.cell(6, 37+i); cell.value = h
-        cell.font = Font(name=FONT_MAIN, size=13, bold=True)
-        cell.fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid")
-        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-
+        cell.font = Font(name=FONT_MAIN, size=13, bold=True); cell.fill = PatternFill(start_color="BDD7EE", end_color="BDD7EE", fill_type="solid"); cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
     return render_data_rows(ws, rows, 7, final_budget_val, eff_days, "Shenghuo")
 
-# ----------------- Bolin Engine -----------------
 def render_bolin(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
     COL_WIDTHS = {'A': 20, 'B': 22, 'C': 10, 'D': 15, 'E': 10, 'F': 5}
     ROW_HEIGHTS = {1: 60, 2: 25, 3: 25, 4: 25, 5: 25, 6: 25, 7: 35}
@@ -425,60 +414,41 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_display_str, rows, r
     for i in range(7, 38): ws.column_dimensions[get_column_letter(i)].width = 5
     ws.column_dimensions['AL'].width = 8; ws.column_dimensions['AM'].width = 12; ws.column_dimensions['AN'].width = 12
     for r, h in ROW_HEIGHTS.items(): ws.row_dimensions[r].height = h
-    
     ws['A1'] = "Media Schedule"; ws.merge_cells("A1:AN1")
     style_range(ws, "A1:AN1", font=Font(name=FONT_MAIN, size=42, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
-    
-    info_map = {
-        "A2": ("TO：", client_name), "A3": ("FROM：", "鉑霖行動行銷 許雅婷 TINA"),
-        "A4": ("客戶名稱：", client_name), "A5": ("廣告名稱：", product_display_str),
-        "G4": ("廣告規格：", "20秒/15秒"), "AE4": ("執行期間：", f"{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}")
-    }
+    info_map = {"A2": ("TO：", client_name), "A3": ("FROM：", "鉑霖行動行銷 許雅婷 TINA"), "A4": ("客戶名稱：", client_name), "A5": ("廣告名稱：", product_display_str), "G4": ("廣告規格：", "20秒/15秒"), "AE4": ("執行期間：", f"{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}")}
     for addr, (lbl, val) in info_map.items():
-        ws[addr] = lbl; ws[addr].font = Font(name=FONT_MAIN, size=13, bold=True)
-        val_cell = ws.cell(ws[addr].row, ws[addr].column + 1); val_cell.value = val; val_cell.font = Font(name=FONT_MAIN, size=13)
-
+        ws[addr] = lbl; ws[addr].font = Font(name=FONT_MAIN, size=13, bold=True); val_cell = ws.cell(ws[addr].row, ws[addr].column + 1); val_cell.value = val; val_cell.font = Font(name=FONT_MAIN, size=13)
     headers = ["頻道", "播出地區", "播出店數", "播出時間", "規格"]
     for i, h in enumerate(headers):
         cell = ws.cell(7, i+1); cell.value = h
-        cell.font = Font(name=FONT_MAIN, size=12, bold=True)
-        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-
+        cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
     curr = start_dt; eff_days = (end_dt - start_dt).days + 1
     for i in range(31):
         col_idx = 6 + i; cell = ws.cell(7, col_idx)
-        if i < eff_days:
-            cell.value = curr; cell.number_format = 'm/d'; curr += timedelta(days=1)
-        cell.font = Font(name=FONT_MAIN, size=10); cell.alignment = Alignment(horizontal='center', vertical='center')
-        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-    
+        if i < eff_days: cell.value = curr; cell.number_format = 'm/d'; curr += timedelta(days=1)
+        cell.font = Font(name=FONT_MAIN, size=10); cell.alignment = Alignment(horizontal='center', vertical='center'); cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
     for i, h in enumerate(["總檔次", "單價", "金額"]):
         cell = ws.cell(7, 37+i); cell.value = h
-        cell.font = Font(name=FONT_MAIN, size=12, bold=True)
-        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
-
+        cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
     return render_data_rows(ws, rows, 8, final_budget_val, eff_days, "Bolin")
 
 # Common Data Renderer
 def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
     curr_row = start_row
-    
-    # Grouping
     grouped_data = {
         "全家廣播": sorted([r for r in rows if r["media"] == "全家廣播"], key=lambda x: x["seconds"]),
         "新鮮視": sorted([r for r in rows if r["media"] == "新鮮視"], key=lambda x: x["seconds"]),
         "家樂福": sorted([r for r in rows if r["media"] == "家樂福"], key=lambda x: x["seconds"]),
     }
-    
-    font_content = Font(name=FONT_MAIN, size=14 if mode == "Dongwu" else 12)
-    row_height = 40 if mode == "Dongwu" else 25
+    font_content = Font(name=FONT_MAIN, size=14 if mode=="Dongwu" else 12)
+    row_h_val = 40 if mode=="Dongwu" else 25
 
     for m_key, data in grouped_data.items():
         if not data: continue
         start_merge_row = curr_row
         
-        # [FIX] Thick border for new media section (Dongwu only)
+        # New Media Section Thick Top Border
         if mode == "Dongwu":
              for c in range(1, 40): ws.cell(curr_row, c).border = Border(top=SIDE_THICK)
 
@@ -487,12 +457,8 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
         elif m_key == "全家廣播": display_name = "全家便利商店\n通路廣播廣告"
         elif m_key == "新鮮視": display_name = "全家便利商店\n新鮮視廣告"
 
-        # [FIX] Sub-grouping for merge (Day-part & Size)
-        # We need to know where merges happen. Since we iterate, we can check prev row.
-        # But simpler: write first, then merge identicals within this media block.
-        
         for idx, r_data in enumerate(data):
-            ws.row_dimensions[curr_row].height = row_height
+            ws.row_dimensions[curr_row].height = row_h_val
             
             ws.cell(curr_row, 1).value = display_name
             ws.cell(curr_row, 2).value = r_data["region"]
@@ -506,13 +472,11 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
             elif r_data.get("is_pkg_member"): pkg_val = ""
 
             if mode == "Dongwu":
-                ws.cell(curr_row, 6).value = rate_val
-                ws.cell(curr_row, 7).value = pkg_val
+                ws.cell(curr_row, 6).value = rate_val; ws.cell(curr_row, 7).value = pkg_val
                 sch_start_col = 8; total_col = 39
             else: 
                 sch_start_col = 6; total_col = 37
-                ws.cell(curr_row, 38).value = rate_val 
-                ws.cell(curr_row, 39).value = pkg_val
+                ws.cell(curr_row, 38).value = rate_val; ws.cell(curr_row, 39).value = pkg_val
 
             sch = r_data["schedule"]; row_sum = 0
             for d_idx in range(31):
@@ -520,77 +484,48 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
                 if d_idx < len(sch):
                     cell.value = sch[d_idx]; row_sum += sch[d_idx]
                 
-                # [FIX] Weekend Color for Dongwu Body
-                if mode == "Dongwu":
-                    # Check column index to determine date. Col 8 is start.
-                    day_offset = col_idx - 8
-                    if day_offset >= 0 and day_offset < eff_days:
-                        # Re-calculate date? Or just use mod?
-                        # Better to pass start_dt but simple check:
-                        # We know weekends were colored in header. Check header fill? No.
-                        # Check mod logic. 
-                        pass # Color logic below
-            
+                # Weekend Color (Body) - Dongwu
+                if mode == "Dongwu" and d_idx < eff_days:
+                     # Check if corresponding day in header is weekend? 
+                     # H is 8. H7 contains date.
+                     header_cell = ws.cell(7, col_idx)
+                     if header_cell.value and isinstance(header_cell.value, (datetime, date)):
+                         if header_cell.value.weekday() >= 5:
+                             cell.fill = PatternFill(start_color="FFFF99", end_color="FFFF99", fill_type="solid")
+
             ws.cell(curr_row, total_col).value = row_sum
 
-            # Apply Styles & Number Format
             for c in range(1, ws.max_column + 1):
                 cell = ws.cell(curr_row, c)
                 cell.font = font_content
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-                cell.border = Border(left=SIDE_THIN, right=SIDE_THIN, top=SIDE_THIN, bottom=SIDE_THIN)
+                if not cell.border.top: cell.border = Border(left=SIDE_THIN, right=SIDE_THIN, top=SIDE_THIN, bottom=SIDE_THIN) # Preserve existing top
+                else: cell.border = Border(left=SIDE_THIN, right=SIDE_THIN, top=cell.border.top, bottom=SIDE_THIN)
                 if isinstance(cell.value, (int, float)): cell.number_format = "#,##0"
-                
-                # [FIX] Dongwu Weekend Color (Body)
-                if mode == "Dongwu" and 8 <= c <= 38:
-                    if ws.cell(7, c).fill.start_color.index == "FFFFCC": # Check header color? No, header uses theme.
-                        # Re-calc date
-                        day_idx = c - 8
-                        if day_idx < eff_days: # Check range
-                            # How to get date? Need start_dt passed or inferred?
-                            # Simplest: check if (start_dt + day_idx).weekday >= 5
-                            # But start_dt is not passed to this func cleanly.
-                            # Hack: Check header value if it's a date? Header row 7 has dates.
-                            hdr_val = ws.cell(7, c).value
-                            if isinstance(hdr_val, datetime) or isinstance(hdr_val, date):
-                                if hdr_val.weekday() >= 5:
-                                    cell.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
-
             curr_row += 1
 
-        # --- Merging Logic ---
-        # 1. Station Name
+        # Merges
         if curr_row > start_merge_row:
             ws.merge_cells(start_row=start_merge_row, start_column=1, end_row=curr_row-1, end_column=1)
         
-        # 2. Package Cost (National)
         if data[0].get("is_pkg_member"):
             if mode == "Dongwu": ws.merge_cells(start_row=start_merge_row, start_column=7, end_row=curr_row-1, end_column=7)
             else: ws.merge_cells(start_row=start_merge_row, start_column=39, end_row=curr_row-1, end_column=39)
-
-        # [FIX] 3. Dongwu: Merge Day-part (Col 4) & Size (Col 5) if identical & consecutive
+        
+        # Dongwu Sub-merge (Daypart & Size)
         if mode == "Dongwu":
-            # Scan rows in this group
-            for col_idx in [4, 5]: # Daypart, Size
-                merge_start = start_merge_row
-                while merge_start < curr_row:
-                    merge_end = merge_start
-                    current_val = ws.cell(merge_start, col_idx).value
-                    # Look ahead
-                    while merge_end + 1 < curr_row:
-                        next_val = ws.cell(merge_end + 1, col_idx).value
-                        if next_val == current_val:
-                            merge_end += 1
-                        else:
-                            break
-                    
-                    if merge_end > merge_start:
-                        ws.merge_cells(start_row=merge_start, start_column=col_idx, end_row=merge_end, end_column=col_idx)
-                    
-                    merge_start = merge_end + 1
+            for col_idx in [4, 5]:
+                m_start = start_merge_row
+                while m_start < curr_row:
+                    m_end = m_start; curr_val = ws.cell(m_start, col_idx).value
+                    while m_end + 1 < curr_row:
+                        if ws.cell(m_end + 1, col_idx).value == curr_val: m_end += 1
+                        else: break
+                    if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col_idx, end_row=m_end, end_column=col_idx)
+                    m_start = m_end + 1
 
     # Total Row
-    ws.row_dimensions[curr_row].height = FOOTER_ROW_HEIGHT # 30
+    ws.row_dimensions[curr_row].height = 30
     label_col = 6 if mode == "Dongwu" else 36
     total_val_col = 7 if mode == "Dongwu" else 39
     
@@ -606,85 +541,56 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
     total_spot_col = 39 if mode == "Dongwu" else 37
     total_spots_all = 0
     sch_start = 8 if mode == "Dongwu" else 6
-    
     for d_idx in range(31):
         col_idx = sch_start + d_idx
         daily_sum = sum([r["schedule"][d_idx] for r in rows if d_idx < len(r["schedule"])]) if d_idx < eff_days else 0
         ws.cell(curr_row, col_idx).value = daily_sum
         total_spots_all += daily_sum
         ws.cell(curr_row, col_idx).alignment = Alignment(horizontal='center', vertical='center')
-        ws.cell(curr_row, col_idx).font = font_content # Match font
     
-    # [FIX] Total Spots Formatting
     ws.cell(curr_row, total_spot_col).value = total_spots_all
     ws.cell(curr_row, total_spot_col).font = Font(name=FONT_MAIN, size=14, bold=True)
     ws.cell(curr_row, total_spot_col).alignment = Alignment(horizontal='center', vertical='center')
+    ws.cell(curr_row, total_spot_col).border = Border(right=SIDE_THICK, top=SIDE_THICK, bottom=SIDE_THICK)
     
     if mode == "Dongwu":
-        # [FIX] Dongwu Total Row Style
-        for c in range(1, 40):
-            cell = ws.cell(curr_row, c)
-            cell.border = Border(top=SIDE_THICK, bottom=SIDE_THICK) # Thick Top/Bottom
-            if c == 39: # AM Col
-                 cell.border = Border(top=SIDE_THICK, bottom=SIDE_THICK, right=SIDE_THICK)
+        for c in range(1, 40): 
+            existing_right = SIDE_THICK if c == 39 else SIDE_THIN
+            ws.cell(curr_row, c).border = Border(top=SIDE_THICK, bottom=SIDE_THICK, right=existing_right, left=SIDE_THIN)
     else:
-        # Others
         total_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
         for c in range(1, 40): ws.cell(curr_row, c).fill = total_fill
     
     return curr_row
 
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val, prod_cost):
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "工作表1"
+    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "工作表1"
+    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1
     
-    ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
-    ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.fitToPage = True
-    ws.page_setup.fitToWidth = 1
-    
-    if format_type == "Dongwu":
-        curr_row = render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
-    elif format_type == "Shenghuo":
-        curr_row = render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
-    else: 
-        curr_row = render_bolin(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
+    if format_type == "Dongwu": curr_row = render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
+    elif format_type == "Shenghuo": curr_row = render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
+    else: curr_row = render_bolin(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
 
     curr_row += 1
     vat = int(round(final_budget_val * 0.05))
     grand_total = final_budget_val + vat
     
-    footer_data = [
-        ("製作", prod_cost),
-        ("5% VAT", vat),
-        ("Grand Total", grand_total)
-    ]
-    
-    label_col = 6 if format_type == "Dongwu" else 36
-    val_col = 7 if format_type == "Dongwu" else 39
+    footer_data = [("製作", prod_cost), ("5% VAT", vat), ("Grand Total", grand_total)]
+    label_col = 6 if format_type == "Dongwu" else 36; val_col = 7 if format_type == "Dongwu" else 39
     
     for label, val in footer_data:
-        ws.row_dimensions[curr_row].height = FOOTER_ROW_HEIGHT # 30
-        ws.cell(curr_row, label_col).value = label
-        ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center')
-        ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14 if format_type=="Dongwu" else 12) # Font 14 for Dongwu
-        
-        ws.cell(curr_row, val_col).value = val
-        ws.cell(curr_row, val_col).number_format = "#,##0"
-        ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center')
+        ws.row_dimensions[curr_row].height = 30
+        ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center')
+        ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14 if format_type=="Dongwu" else 12)
+        ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = "#,##0"; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center')
         ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14 if format_type=="Dongwu" else 12)
         
-        # [FIX] Dongwu Footer Borders
-        if format_type == "Dongwu":
-            # Apply thick left to Label, thick right to Value
-            ws.cell(curr_row, label_col).border = Border(left=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN)
-            ws.cell(curr_row, val_col).border = Border(right=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN)
+        if format_type == "Dongwu": # Thick Borders for footer block
+             ws.cell(curr_row, label_col).border = Border(left=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, right=SIDE_THIN)
+             ws.cell(curr_row, val_col).border = Border(right=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN)
         elif label == "Grand Total":
             grand_fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid")
-            for c in range(1, 40):
-                ws.cell(curr_row, c).fill = grand_fill
-                ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
+            for c in range(1, 40): ws.cell(curr_row, c).fill = grand_fill; ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
         curr_row += 1
 
     curr_row += 1
@@ -692,13 +598,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="FF0000")
     curr_row += 1
     for rm in remarks_list:
-        ws.cell(curr_row, 1).value = rm
-        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14)
+        ws.cell(curr_row, 1).value = rm; ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14)
         curr_row += 1
 
-    out = io.BytesIO()
-    wb.save(out)
-    return out.getvalue()
+    out = io.BytesIO(); wb.save(out); return out.getvalue()
 
 # =========================================================
 # 7. UI Main
@@ -708,23 +611,15 @@ with st.sidebar:
     if not st.session_state.is_supervisor:
         pwd = st.text_input("輸入密碼", type="password", key="pwd_input")
         if st.button("登入"):
-            if pwd == "1234":
-                st.session_state.is_supervisor = True
-                st.rerun()
-            else:
-                st.error("密碼錯誤")
+            if pwd == "1234": st.session_state.is_supervisor = True; st.rerun()
+            else: st.error("密碼錯誤")
     else:
         st.success("✅ 目前狀態：主管模式")
-        if st.button("登出"):
-            st.session_state.is_supervisor = False
-            st.rerun()
+        if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v82.0)")
+st.title("📺 媒體 Cue 表生成器 (v83.0)")
+format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
-st.markdown("### 1. 選擇格式")
-format_type = st.radio("", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
-
-st.markdown("### 2. 基本資料設定")
 c1, c2, c3, c4 = st.columns(4)
 with c1: client_name = st.text_input("客戶名稱", "萬國通路")
 with c2: product_name = st.text_input("產品名稱", "統一布丁")
@@ -735,13 +630,10 @@ final_budget_val = total_budget_input
 if st.session_state.is_supervisor:
     st.markdown("---")
     col_sup1, col_sup2 = st.columns([1, 2])
-    with col_sup1:
-        st.error("🔒 [主管] 專案優惠價覆寫")
+    with col_sup1: st.error("🔒 [主管] 專案優惠價覆寫")
     with col_sup2:
-        override_val = st.number_input("輸入最終成交價 (此數值將取代自動計算的 Total)", value=total_budget_input)
-        if override_val != total_budget_input:
-            final_budget_val = override_val
-            st.caption(f"⚠️ 注意：報表將使用 ${final_budget_val:,} 進行結算")
+        override_val = st.number_input("輸入最終成交價", value=total_budget_input)
+        if override_val != total_budget_input: final_budget_val = override_val; st.caption(f"⚠️ 使用 ${final_budget_val:,} 結算")
     st.markdown("---")
 
 c5, c6 = st.columns(2)
@@ -750,14 +642,14 @@ with c6: end_date = st.date_input("結束日", datetime(2026, 1, 31))
 days_count = (end_date - start_date).days + 1
 st.info(f"📅 走期共 **{days_count}** 天")
 
-with st.expander("📝 備註欄位設定 (Remarks)", expanded=False):
+with st.expander("📝 備註欄位設定", expanded=False):
     rc1, rc2, rc3 = st.columns(3)
     sign_deadline = rc1.date_input("回簽截止日", datetime.now() + timedelta(days=3))
     billing_month = rc2.text_input("請款月份", "2026年2月")
     payment_date = rc3.date_input("付款兌現日", datetime(2026, 3, 31))
 
+# Media Selection
 st.markdown("### 3. 媒體投放設定")
-
 if "rad_share" not in st.session_state: st.session_state.rad_share = 100
 if "fv_share" not in st.session_state: st.session_state.fv_share = 0
 if "cf_share" not in st.session_state: st.session_state.cf_share = 0
@@ -794,7 +686,6 @@ def on_slider_change(changed_key):
             st.session_state[k1] = int(rem * ratio)
             st.session_state[k2] = rem - st.session_state[k1]
 
-st.write("請勾選要投放的媒體：")
 col_cb1, col_cb2, col_cb3 = st.columns(3)
 with col_cb1: is_rad = st.checkbox("全家廣播", value=True, key="cb_rad", on_change=on_media_change)
 with col_cb2: is_fv = st.checkbox("新鮮視", value=False, key="cb_fv", on_change=on_media_change)
@@ -802,60 +693,39 @@ with col_cb3: is_cf = st.checkbox("家樂福", value=False, key="cb_cf", on_chan
 
 m1, m2, m3 = st.columns(3)
 config = {}
-
 if is_rad:
     with m1:
         st.markdown("#### 📻 全家廣播")
         is_nat = st.checkbox("全省聯播", True, key="rad_nat")
         regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=REGIONS_ORDER, key="rad_reg")
-        effective_is_nat = is_nat
-        if not is_nat and len(regs) == 6:
-            effective_is_nat = True
-            regs = ["全省"]
-            st.info("✅ 已選滿6區，自動轉為全省聯播計價")
+        if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
         secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
         st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
         sec_shares = {}
         if len(secs) > 1:
-            st.caption("分配秒數佔比")
-            rem = 100
-            sorted_secs = sorted(secs)
+            rem = 100; sorted_secs = sorted(secs)
             for i, s in enumerate(sorted_secs):
-                if i < len(sorted_secs) - 1:
-                    v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}")
-                    sec_shares[s] = v; rem -= v
-                else:
-                    sec_shares[s] = rem
-                    st.markdown(f"🔹 **{s}秒**: {rem}% (自動計算)")
+                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}"); sec_shares[s] = v; rem -= v
+                else: sec_shares[s] = rem
         elif secs: sec_shares[secs[0]] = 100
-        config["全家廣播"] = {"is_national": effective_is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
+        config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
 
 if is_fv:
     with m2:
         st.markdown("#### 📺 新鮮視")
         is_nat = st.checkbox("全省聯播", False, key="fv_nat")
         regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=["北區"], key="fv_reg")
-        effective_is_nat = is_nat
-        if not is_nat and len(regs) == 6:
-            effective_is_nat = True
-            regs = ["全省"]
-            st.info("✅ 已選滿6區，自動轉為全省聯播計價")
+        if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
         secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
         st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
         sec_shares = {}
         if len(secs) > 1:
-            st.caption("分配秒數佔比")
-            rem = 100
-            sorted_secs = sorted(secs)
+            rem = 100; sorted_secs = sorted(secs)
             for i, s in enumerate(sorted_secs):
-                if i < len(sorted_secs) - 1:
-                    v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}")
-                    sec_shares[s] = v; rem -= v
-                else:
-                    sec_shares[s] = rem
-                    st.markdown(f"🔹 **{s}秒**: {rem}% (自動計算)")
+                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}"); sec_shares[s] = v; rem -= v
+                else: sec_shares[s] = rem
         elif secs: sec_shares[secs[0]] = 100
-        config["新鮮視"] = {"is_national": effective_is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
+        config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
 
 if is_cf:
     with m3:
@@ -864,61 +734,43 @@ if is_cf:
         st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
         sec_shares = {}
         if len(secs) > 1:
-            st.caption("分配秒數佔比")
-            rem = 100
-            sorted_secs = sorted(secs)
+            rem = 100; sorted_secs = sorted(secs)
             for i, s in enumerate(sorted_secs):
-                if i < len(sorted_secs) - 1:
-                    v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"cs_{s}")
-                    sec_shares[s] = v; rem -= v
-                else:
-                    sec_shares[s] = rem
-                    st.markdown(f"🔹 **{s}秒**: {rem}% (自動計算)")
+                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"cs_{s}"); sec_shares[s] = v; rem -= v
+                else: sec_shares[s] = rem
         elif secs: sec_shares[secs[0]] = 100
         config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
 
 if config:
     rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count)
-    
     prod_cost = prod_cost_input 
     vat = int(round(final_budget_val * 0.05))
     grand_total = final_budget_val + vat
     p_str = f"{'、'.join([f'{s}秒' for s in sorted(list(set(r['seconds'] for r in rows)))])} {product_name}"
     rem = get_remarks_text(sign_deadline, billing_month, payment_date)
-
     html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
     st.components.v1.html(html_preview, height=700, scrolling=True)
-
     with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
         for log in logs:
-            st.markdown(f"### {log['Media']}")
-            st.markdown(f"- **預算**: {log['Budget']}")
-            st.markdown(f"- **狀態**: {log['Status']}")
+            st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
             if 'Details' in log:
-                for detail in log['Details']:
-                    st.info(detail)
+                for detail in log['Details']: st.info(detail)
             st.divider()
-
     col_dl1, col_dl2 = st.columns(2)
     with col_dl2:
         try:
             xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, p_str, rows, rem, final_budget_val, prod_cost)
             pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
-            if pdf_bytes:
-                st.download_button(f"📥 下載 PDF ({method})", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl")
-            else:
-                st.warning(f"本地轉檔失敗，使用網頁版 PDF")
+            if pdf_bytes: st.download_button(f"📥 下載 PDF ({method})", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl")
+            else: 
                 pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
                 if pdf_bytes: st.download_button("📥 下載 PDF (Web)", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl_web")
         except: pass
-
     with col_dl1:
         if st.session_state.is_supervisor:
             if rows:
                 try:
                     xlsx = generate_excel_from_scratch(format_type, start_date, end_date, client_name, p_str, rows, rem, final_budget_val, prod_cost)
                     st.download_button("📥 下載 Excel (主管權限)", xlsx, f"Cue_{safe_filename(client_name)}.xlsx", key="xlsx_dl")
-                except Exception as e:
-                    st.error(f"Excel Error: {e}")
-        else:
-            st.info("🔒 Excel 下載功能僅限主管使用 (請從左側登入)")
+                except Exception as e: st.error(f"Excel Error: {e}")
+        else: st.info("🔒 Excel 下載功能僅限主管使用")
