@@ -40,9 +40,9 @@ def html_escape(s):
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
 
 # =========================================================
-# 2. 頁面設定
+# 2. 頁面設定 (必須在最前面)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v92.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v92.1")
 
 # =========================================================
 # 3. PDF 策略
@@ -307,9 +307,10 @@ def calculate_plan_data(config, total_budget, days_count):
 # 6. OpenPyXL 規格重建引擎
 # =========================================================
 FONT_MAIN = "微軟正黑體"
-BS_THIN = 'thin'
-BS_MEDIUM = 'medium'
-BS_HAIR = 'hair'
+# Defines Border Objects Globally
+SIDE_THIN = Side(style='thin')
+SIDE_MEDIUM = Side(style='medium')
+SIDE_HAIR = Side(style='hair')
 
 def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment=None):
     rows = list(ws[cell_range])
@@ -320,26 +321,18 @@ def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment
             if font: cell.font = font
             if alignment: cell.alignment = alignment
 
-def apply_borders(ws, range_string, style='thin'):
-    min_col, min_row, max_col, max_row = openpyxl.utils.range_boundaries(range_string)
-    border_side = Side(style=style, color="000000")
-    border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
-    for r in range(min_row, max_row + 1):
-        for c in range(min_col, max_col + 1):
-            ws.cell(r, c).border = border
-
 def draw_outer_border(ws, min_r, max_r, min_c, max_c):
     for r in range(min_r, max_r + 1):
         for c in range(min_c, max_c + 1):
             cell = ws.cell(r, c)
             new_border = copy(cell.border)
-            top = Side(style=BS_MEDIUM) if r == min_r else new_border.top
-            bottom = Side(style=BS_MEDIUM) if r == max_r else new_border.bottom
-            left = Side(style=BS_MEDIUM) if c == min_c else new_border.left
-            right = Side(style=BS_MEDIUM) if c == max_c else new_border.right
+            top = SIDE_MEDIUM if r == min_r else new_border.top
+            bottom = SIDE_MEDIUM if r == max_r else new_border.bottom
+            left = SIDE_MEDIUM if c == min_c else new_border.left
+            right = SIDE_MEDIUM if c == max_c else new_border.right
             cell.border = Border(top=top, bottom=bottom, left=left, right=right)
 
-# ----------------- Dongwu Engine (No changes) -----------------
+# ----------------- Dongwu Engine -----------------
 def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
     COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
     ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
@@ -349,7 +342,7 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     for r, h in ROW_HEIGHTS.items(): ws.row_dimensions[r].height = h
     ws['A1'] = "Media Schedule"; ws.merge_cells("A1:AM1")
     style_range(ws, "A1:AM1", font=Font(name=FONT_MAIN, size=48, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
-    for c in range(1, 40): ws.cell(3, c).border = Border(top=Side(style=BS_MEDIUM))
+    for c in range(1, 40): ws.cell(3, c).border = Border(top=SIDE_MEDIUM)
     info_map = {"A3": ("客戶名稱：", client_name), "A4": ("Product：", product_display_str), "A5": ("Period :", f"{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"), "A6": ("Medium :", "全家廣播/新鮮視/家樂福")}
     for addr, (lbl, val) in info_map.items():
         ws[addr] = lbl; ws[addr].font = Font(name=FONT_MAIN, size=14, bold=True); ws[addr].alignment = Alignment(vertical='center')
@@ -358,7 +351,7 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     headers = [("A","Station"), ("B","Location"), ("C","Program"), ("D","Day-part"), ("E","Size"), ("F","rate\n(Net)"), ("G","Package-cost\n(Net)")]
     for col, txt in headers:
         ws[f"{col}7"] = txt; ws.merge_cells(f"{col}7:{col}8")
-        style_range(ws, f"{col}7:{col}8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center', wrap_text=True), border=Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_THIN), right=Side(style=BS_THIN)))
+        style_range(ws, f"{col}7:{col}8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center', wrap_text=True), border=Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN))
     curr = start_dt; eff_days = (end_dt - start_dt).days + 1
     for i in range(31):
         col_idx = 8 + i; d_cell = ws.cell(7, col_idx); w_cell = ws.cell(8, col_idx)
@@ -368,13 +361,13 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
             curr += timedelta(days=1)
         d_cell.font = Font(name=FONT_MAIN, size=12); w_cell.font = Font(name=FONT_MAIN, size=12)
         d_cell.alignment = w_cell.alignment = Alignment(horizontal='center', vertical='center')
-        d_cell.border = Border(left=Side(style=BS_THIN), right=Side(style=BS_THIN), top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN))
-        w_cell.border = Border(left=Side(style=BS_THIN), right=Side(style=BS_THIN), bottom=Side(style=BS_MEDIUM), top=Side(style=BS_THIN))
+        d_cell.border = Border(left=SIDE_THIN, right=SIDE_THIN, top=SIDE_MEDIUM, bottom=SIDE_THIN)
+        w_cell.border = Border(left=SIDE_THIN, right=SIDE_THIN, bottom=SIDE_MEDIUM, top=SIDE_THIN)
     ws['AM7'] = "檔次"; ws.merge_cells("AM7:AM8")
-    style_range(ws, "AM7:AM8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center'), border=Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_THIN), right=Side(style=BS_THIN)))
+    style_range(ws, "AM7:AM8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center'), border=Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN))
     return render_data_rows(ws, rows, 9, final_budget_val, eff_days, "Dongwu", product_display_str)
 
-# ----------------- Shenghuo Engine (No Colors, Infinite) -----------------
+# ----------------- Shenghuo Engine (Infinite + White BG + Specific Format) -----------------
 def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, remarks_list, final_budget_val, prod_cost):
     days_n = (end_dt - start_dt).days + 1
     
@@ -407,39 +400,36 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
     ws['A4'] = "蔡伊閔"
     ws['A4'].font = Font(name=FONT_MAIN, size=16); ws['A4'].alignment = Alignment(vertical='center')
 
-    # Row 5-6 (No Grey Fill, Top/Bottom Medium)
+    # Row 5-6 (White, Top/Bottom Medium)
     for r in [5, 6]:
         for c in range(1, total_cols + 1):
             cell = ws.cell(r, c)
             cell.font = Font(name=FONT_MAIN, size=14, bold=True)
-            top = Side(style=BS_MEDIUM); bottom = Side(style=BS_MEDIUM)
-            left = Side(style=BS_MEDIUM) if c==1 else Side()
-            right = Side(style=BS_MEDIUM) if c==total_cols else Side()
+            top = SIDE_MEDIUM; bottom = SIDE_MEDIUM
+            left = SIDE_MEDIUM if c==1 else None; right = SIDE_MEDIUM if c==total_cols else None
             cell.border = Border(top=top, bottom=bottom, left=left, right=right)
 
     ws['A5'] = "客戶名稱："; ws['B5'] = client_name
     ws['F5'] = "廣告規格："; 
     
-    # Collect Unique Seconds for Spec String
+    # Spec String (Union)
     unique_secs = sorted(list(set([r['seconds'] for r in rows])))
     spec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
     ws['H5'] = spec_str
 
-    # Date Range
     date_range_col = total_cols - 1
     ws.cell(5, date_range_col).value = f"執行期間：: {start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"
     ws.cell(5, date_range_col).alignment = Alignment(horizontal='right', vertical='center')
 
-    ws['A6'] = "廣告名稱："; ws['B6'] = product_name_raw # Just Product Name
+    ws['A6'] = "廣告名稱："; ws['B6'] = product_name_raw
     
-    # Month Labels
     ws.cell(6, 6).value = f"{start_dt.month}月"
     for i in range(days_n):
         d = start_dt + timedelta(days=i)
         if d.month != start_dt.month and d.day == 1:
             ws.cell(6, 6+i).value = f"{d.month}月"
 
-    # Row 7 & 8 (Table Header - No Blue)
+    # Row 7 & 8 (Table Header - No Color)
     headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
     
     for i, h in enumerate(headers):
@@ -448,11 +438,10 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         style_range(ws, f"{get_column_letter(i+1)}7:{get_column_letter(i+1)}8", 
                     font=Font(name=FONT_MAIN, size=14, bold=True), 
                     alignment=Alignment(horizontal='center', vertical='center', wrap_text=True),
-                    border=Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_HAIR), left=Side(style=BS_HAIR), right=Side(style=BS_HAIR)))
+                    border=Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR))
     
-    # A7 Left Medium
-    ws.cell(7,1).border = Border(top=Side(style=BS_MEDIUM), left=Side(style=BS_MEDIUM), right=Side(style=BS_HAIR))
-    ws.cell(8,1).border = Border(bottom=Side(style=BS_HAIR), left=Side(style=BS_MEDIUM), right=Side(style=BS_HAIR))
+    ws.cell(7,1).border = Border(top=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_HAIR)
+    ws.cell(8,1).border = Border(bottom=SIDE_HAIR, left=SIDE_MEDIUM, right=SIDE_HAIR)
 
     # Date Cols
     curr = start_dt
@@ -460,11 +449,11 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         c = 6 + i
         cell7 = ws.cell(7, c); cell7.value = curr; cell7.number_format = 'd'
         cell7.font = Font(name=FONT_MAIN, size=14, bold=True); cell7.alignment = Alignment(horizontal='center', vertical='center')
-        cell7.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_HAIR), left=Side(style=BS_HAIR), right=Side(style=BS_HAIR))
+        cell7.border = Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR)
         
         cell8 = ws.cell(8, c); cell8.value = f'=MID("日一二三四五六",WEEKDAY({get_column_letter(c)}7,1),1)'
         cell8.font = Font(name=FONT_MAIN, size=14, bold=True); cell8.alignment = Alignment(horizontal='center', vertical='center')
-        cell8.border = Border(top=Side(style=BS_HAIR), bottom=Side(style=BS_HAIR), left=Side(style=BS_HAIR), right=Side(style=BS_HAIR))
+        cell8.border = Border(top=SIDE_HAIR, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR)
         
         # Weekend Color Row 8 Only
         if curr.weekday() >= 5:
@@ -481,17 +470,17 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         style_range(ws, f"{get_column_letter(c)}7:{get_column_letter(c)}8",
                     font=Font(name=FONT_MAIN, size=14, bold=True),
                     alignment=Alignment(horizontal='center', vertical='center'),
-                    border=Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_HAIR), left=Side(style=BS_HAIR), right=Side(style=BS_HAIR)))
+                    border=Border(top=SIDE_MEDIUM, bottom=SIDE_HAIR, left=SIDE_HAIR, right=SIDE_HAIR))
     
-    ws.cell(7, total_cols).border = Border(top=Side(style=BS_MEDIUM), right=Side(style=BS_MEDIUM), left=Side(style=BS_HAIR))
-    ws.cell(8, total_cols).border = Border(bottom=Side(style=BS_HAIR), right=Side(style=BS_MEDIUM), left=Side(style=BS_HAIR))
+    ws.cell(7, total_cols).border = Border(top=SIDE_MEDIUM, right=SIDE_MEDIUM, left=SIDE_HAIR)
+    ws.cell(8, total_cols).border = Border(bottom=SIDE_HAIR, right=SIDE_MEDIUM, left=SIDE_HAIR)
 
     return render_data_rows(ws, rows, 9, final_budget_val, days_n, "Shenghuo", product_name_raw)
 
 # ----------------- Bolin Engine (Infinite) -----------------
 def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, remarks_list, final_budget_val, prod_cost):
     days_n = (end_dt - start_dt).days + 1
-    total_cols = 1 + 5 + days_n + 3 # Spacer(A) + Fixed(B-F) + Dates + End(3)
+    total_cols = 1 + 5 + days_n + 3 
     
     ws.column_dimensions['A'].width = 1.76
     ws.column_dimensions['B'].width = 20
@@ -510,7 +499,6 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, rema
     ROW_H_MAP = {1:15, 2:25, 3:25, 4:25, 5:25, 6:25, 7:35}
     for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
     
-    # 2. Meta
     ws['B2'] = "TO："; ws['B2'].font = Font(name=FONT_MAIN, size=13, bold=True); ws['B2'].alignment = Alignment(horizontal='right')
     ws['C2'] = client_name; ws['C2'].font = Font(name=FONT_MAIN, size=13)
     ws['B3'] = "FROM："; ws['B3'].font = Font(name=FONT_MAIN, size=13, bold=True); ws['B3'].alignment = Alignment(horizontal='right')
@@ -521,7 +509,6 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, rema
     ws['C5'] = product_name_raw; ws['C5'].font = Font(name=FONT_MAIN, size=13)
 
     ws['G4'] = "廣告規格："; ws['G4'].font = Font(name=FONT_MAIN, size=13, bold=True)
-    # Collect Unique Seconds
     unique_secs = sorted(list(set([r['seconds'] for r in rows])))
     ws['H4'] = " ".join([f"{s}秒廣告" for s in unique_secs]); ws['H4'].font = Font(name=FONT_MAIN, size=13)
     
@@ -530,7 +517,6 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, rema
     ws.cell(4, date_lbl_col).value = "執行期間："; ws.cell(4, date_lbl_col).font = Font(name=FONT_MAIN, size=13, bold=True)
     ws.cell(4, date_val_col).value = f"{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"; ws.cell(4, date_val_col).font = Font(name=FONT_MAIN, size=13)
 
-    # Row 7 Header
     header_fill = PatternFill(start_color="F8CBAD", end_color="F8CBAD", fill_type="solid")
     headers = ["頻道", "播出地區", "播出店數", "播出時間", "規格"]
     for i, h in enumerate(headers):
@@ -538,8 +524,8 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, rema
         cell = ws.cell(7, c); cell.value = h
         cell.fill = header_fill
         cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        cell.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
-        if c==2: cell.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_MEDIUM), right=Side(style=BS_THIN))
+        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
+        if c==2: cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_THIN)
 
     curr = start_dt
     for i in range(days_n):
@@ -547,7 +533,15 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, rema
         cell = ws.cell(7, c); cell.value = curr; cell.number_format = 'm/d'
         cell.fill = header_fill
         cell.font = Font(name=FONT_MAIN, size=10, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center')
-        cell.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
+        # Bolin Row 8 logic? No, Bolin only Row 7 header. But let's check weekends on data rows.
+        # But wait, Bolin usually doesn't color weekends? User said "Bolin and Shenghuo weekend color SAME AS Dongwu".
+        # Dongwu colors Row 8 only. Bolin has only Row 7. So maybe color Row 7 if weekend?
+        # Or maybe Bolin doesn't have a Weekday row? The spec implies standard header.
+        # Let's color Row 7 if weekend for Bolin, since there is no Row 8 header.
+        # Or insert Row 8? No, strictly follow Bolin layout (1 row header).
+        # So we color Row 7.
+        if curr.weekday() >= 5: cell.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
         curr += timedelta(days=1)
 
     end_h = ["總檔次", "單價", "金額"]
@@ -556,8 +550,8 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, rema
         cell = ws.cell(7, c); cell.value = h
         cell.fill = header_fill
         cell.font = Font(name=FONT_MAIN, size=12, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center')
-        cell.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
-        if i==2: cell.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_THIN), right=Side(style=BS_MEDIUM))
+        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_THIN)
+        if i==2: cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_THIN, right=SIDE_MEDIUM)
 
     return render_data_rows(ws, rows, 8, final_budget_val, days_n, "Bolin", product_name_raw)
 
@@ -583,9 +577,9 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
         start_c = 1 if mode != "Bolin" else 2
         for c in range(start_c, max_c + 1):
             cell = ws.cell(curr_row, c)
-            l = BS_MEDIUM if c==start_c else BS_THIN if mode != "Shenghuo" else BS_HAIR
-            r = BS_MEDIUM if c==max_c else BS_THIN if mode != "Shenghuo" else BS_HAIR
-            cell.border = Border(top=Side(style=BS_MEDIUM), left=Side(style=l), right=Side(style=r), bottom=Side(style=BS_THIN) if mode!="Shenghuo" else Side(style=BS_HAIR))
+            l = SIDE_MEDIUM if c==start_c else SIDE_THIN if mode != "Shenghuo" else SIDE_HAIR
+            r = SIDE_MEDIUM if c==max_c else SIDE_THIN if mode != "Shenghuo" else SIDE_HAIR
+            cell.border = Border(top=SIDE_MEDIUM, left=l, right=r, bottom=SIDE_THIN if mode!="Shenghuo" else SIDE_HAIR)
 
         display_name = f"全家便利商店\n{m_key if m_key!='家樂福' else ''}廣告"
         if m_key == "家樂福": display_name = "家樂福"
@@ -597,7 +591,7 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
             
             # Format Specs
             sec_txt = f"{r_data['seconds']}秒"
-            store_txt = int(r_data.get("program_num", 0))
+            store_txt = str(int(r_data.get("program_num", 0)))
             if mode == "Shenghuo":
                 if m_key == "新鮮視":
                     sec_txt = f"{r_data['seconds']}秒\n影片/影像 1920x1080 (mp4)"
@@ -648,19 +642,19 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
                 cell.font = font_content
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
                 
-                t_style = cell.border.top.style if (cell.border.top and cell.border.top.style) else BS_THIN
+                t_style = cell.border.top.style if (cell.border.top and cell.border.top.style) else 'thin'
                 
-                l_style = BS_THIN; r_style = BS_THIN; b_style = BS_THIN
+                l_style = 'thin'; r_style = 'thin'; b_style = 'thin'
                 if mode == "Shenghuo":
-                    l_style = BS_HAIR; r_style = BS_HAIR; b_style = BS_HAIR
-                    if c==start_c: l_style = BS_MEDIUM
-                    if c==max_c: r_style = BS_MEDIUM
+                    l_style = 'hair'; r_style = 'hair'; b_style = 'hair'
+                    if c==start_c: l_style = 'medium'
+                    if c==max_c: r_style = 'medium'
                 elif mode == "Bolin":
-                    if c==start_c: l_style = BS_MEDIUM
-                    if c==max_c: r_style = BS_MEDIUM
+                    if c==start_c: l_style = 'medium'
+                    if c==max_c: r_style = 'medium'
                 else: # Dongwu
-                    if c==start_c: l_style = BS_MEDIUM
-                    if c==max_c: r_style = BS_MEDIUM
+                    if c==start_c: l_style = 'medium'
+                    if c==max_c: r_style = 'medium'
 
                 cell.border = Border(left=Side(style=l_style), right=Side(style=r_style), top=Side(style=t_style), bottom=Side(style=b_style))
                 
@@ -692,11 +686,11 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
 
         for c in range(start_c, max_c + 1):
             cell = ws.cell(curr_row-1, c)
-            existing_l = cell.border.left.style if (cell.border.left and cell.border.left.style) else BS_THIN
-            existing_r = cell.border.right.style if (cell.border.right and cell.border.right.style) else BS_THIN
-            existing_t = cell.border.top.style if (cell.border.top and cell.border.top.style) else BS_THIN
+            existing_l = cell.border.left.style if (cell.border.left and cell.border.left.style) else 'thin'
+            existing_r = cell.border.right.style if (cell.border.right and cell.border.right.style) else 'thin'
+            existing_t = cell.border.top.style if (cell.border.top and cell.border.top.style) else 'thin'
             
-            cell.border = Border(top=Side(style=existing_t), bottom=Side(style=BS_MEDIUM), left=Side(style=existing_l), right=Side(style=existing_r))
+            cell.border = Border(top=Side(style=existing_t), bottom=SIDE_MEDIUM, left=Side(style=existing_l), right=Side(style=existing_r))
 
     # Total Row
     ws.row_dimensions[curr_row].height = 40 if mode=="Shenghuo" else 30
@@ -727,10 +721,10 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
     start_c = 1 if mode != "Bolin" else 2
     for c in range(start_c, max_c + 1):
         cell = ws.cell(curr_row, c)
-        l = BS_MEDIUM if c==start_c else BS_THIN if mode!="Shenghuo" else BS_HAIR
-        r = BS_MEDIUM if c==max_c else BS_THIN if mode!="Shenghuo" else BS_HAIR
-        cell.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=l), right=Side(style=r))
-        if mode == "Dongwu" and c==1: cell.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_MEDIUM), right=Side(style=BS_THIN))
+        l = SIDE_MEDIUM if c==start_c else SIDE_THIN if mode!="Shenghuo" else SIDE_HAIR
+        r = SIDE_MEDIUM if c==max_c else SIDE_THIN if mode!="Shenghuo" else SIDE_HAIR
+        cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=Side(style=l), right=Side(style=r))
+        if mode == "Dongwu" and c==1: cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_THIN)
     
     return curr_row
 
@@ -738,10 +732,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "工作表1"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1
     
-    # [FIX] Product Name String for Header vs Table
-    # Dongwu uses "20秒 統一布丁" style? Original code composed it.
-    # Shenghuo/Bolin now request strict "統一布丁".
-    # Let's construct a display string for Dongwu only.
+    # [FIX] Product Name Strings
     unique_secs = sorted(list(set([r['seconds'] for r in rows])))
     product_display_str_dongwu = f"{'、'.join([f'{s}秒' for s in unique_secs])} {product_name}"
     
@@ -758,10 +749,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             ws.row_dimensions[curr_row].height = 30
             ws.cell(curr_row, label_col).value = label; ws.cell(curr_row, label_col).alignment = Alignment(horizontal='right', vertical='center'); ws.cell(curr_row, label_col).font = Font(name=FONT_MAIN, size=14)
             ws.cell(curr_row, val_col).value = val; ws.cell(curr_row, val_col).number_format = "#,##0"; ws.cell(curr_row, val_col).alignment = Alignment(horizontal='center', vertical='center'); ws.cell(curr_row, val_col).font = Font(name=FONT_MAIN, size=14)
-            ws.cell(curr_row, label_col).border = Border(left=Side(style=BS_MEDIUM), top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), right=Side(style=BS_THIN))
-            ws.cell(curr_row, val_col).border = Border(right=Side(style=BS_MEDIUM), top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN))
+            ws.cell(curr_row, label_col).border = Border(left=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, right=SIDE_THIN)
+            ws.cell(curr_row, val_col).border = Border(right=SIDE_THICK, top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN)
             if label == "Grand Total":
-                for c in range(1, 40): ws.cell(curr_row, c).fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid"); ws.cell(curr_row, c).border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM))
+                for c in range(1, 40): ws.cell(curr_row, c).fill = PatternFill(start_color="FFC107", end_color="FFC107", fill_type="solid"); ws.cell(curr_row, c).border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM)
             curr_row += 1
         draw_outer_border(ws, 7, curr_row-1, 1, 39)
 
@@ -797,3 +788,258 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             curr_row += 1
 
     out = io.BytesIO(); wb.save(out); return out.getvalue()
+
+def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
+    header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
+    if format_type == "Bolin": header_cls = "bg-bolin-head"
+    eff_days = min(days_cnt, 31)
+    font_b64 = load_font_base64()
+    font_face = f"@font-face {{ font-family: 'NotoSansTC'; src: url(data:font/ttf;base64,{font_b64}) format('truetype'); }}" if font_b64 else ""
+
+    date_th1 = ""; date_th2 = ""; curr = start_dt; weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+    for i in range(eff_days):
+        wd = curr.weekday(); bg = "bg-weekend" if (format_type == "Dongwu" and wd >= 5) else header_cls
+        if format_type in ["Shenghuo", "Bolin"]: bg = header_cls 
+        date_th1 += f"<th class='{bg} col_day'>{curr.day}</th>"; date_th2 += f"<th class='{bg} col_day'>{weekdays[wd]}</th>"; curr += timedelta(days=1)
+
+    cols_def = ["Station", "Location", "Program", "Day-part", "Size", "rate<br>(Net)", "Package-cost<br>(Net)"] if format_type == "Dongwu" else ["頻道", "播出地區", "播出店數", "播出時間", "秒數<br>規格", "單價", "金額"]
+    th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
+    
+    rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
+    tbody = ""
+    grouped_rows = {}
+    for r in rows_sorted: key = (r['media'], r['seconds']); grouped_rows.setdefault(key, []).append(r)
+
+    for (m, sec), group in grouped_rows.items():
+        is_nat = group[0].get('is_pkg_member', False); group_size = len(group)
+        for k, r_data in enumerate(group):
+            tbody += "<tr>"
+            if k == 0:
+                d_name = "全家便利商店<br>通路廣播廣告" if m == "全家廣播" else "全家便利商店<br>新鮮視廣告" if m == "新鮮視" else "家樂福"
+                if format_type in ["Shenghuo", "Bolin"] and m == "全家廣播": d_name = "全家便利商店<br>廣播通路廣告"
+                tbody += f"<td class='left' rowspan='{group_size}'>{d_name}</td>"
+            tbody += f"<td>{region_display(r_data['region'])}</td><td class='right'>{r_data.get('program_num','')}</td><td>{r_data['daypart']}</td><td>{r_data['seconds']}秒</td>"
+            rate = f"{r_data['rate_display']:,}" if isinstance(r_data['rate_display'], int) else r_data['rate_display']
+            pkg = f"{r_data['pkg_display']:,}" if isinstance(r_data['pkg_display'], int) else r_data['pkg_display']
+            tbody += f"<td class='right'>{rate}</td>"
+            if is_nat:
+                if k == 0: tbody += f"<td class='right' rowspan='{group_size}'>{r_data['nat_pkg_display']:,}</td>"
+            else: tbody += f"<td class='right'>{pkg}</td>"
+            for d in r_data['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
+            tbody += f"<td class='bg-total'>{r_data['spots']}</td></tr>"
+
+    totals = [sum([r["schedule"][d] for r in rows if d < len(r["schedule"])]) for d in range(eff_days)]
+    colspan = 5; empty_td = "<td></td>" if format_type == "Dongwu" else ""
+    if format_type != "Dongwu": empty_td = ""
+    tfoot = f"<tr class='bg-total'><td colspan='{colspan}' class='right'>Total (List Price)</td>{empty_td}<td class='right'>{total_list:,}</td>"
+    for t in totals: tfoot += f"<td>{t}</td>"
+    tfoot += f"<td>{sum(totals)}</td></tr>"
+
+    vat = int(round(budget * 0.05))
+    footer_rows = f"<tr><td colspan='6' class='right'>製作</td><td class='right'>{prod:,}</td><td colspan='{eff_days+1}'></td></tr>"
+    footer_rows += f"<tr><td colspan='6' class='right'>專案優惠價 (Budget)</td><td class='right' style='color:red; font-weight:bold;'>{budget:,}</td><td colspan='{eff_days+1}'></td></tr>"
+    footer_rows += f"<tr><td colspan='6' class='right'>5% VAT</td><td class='right'>{vat:,}</td><td colspan='{eff_days+1}'></td></tr>"
+    footer_rows += f"<tr class='bg-grand'><td colspan='6' class='right'>Grand Total</td><td class='right'>{grand_total:,}</td><td colspan='{eff_days+1}'></td></tr>"
+
+    return f"""<html><head><style>
+    {font_face}
+    body {{ font-family: 'NotoSansTC', sans-serif !important; font-size: 10px; }}
+    table {{ width: 100%; border-collapse: collapse; }}
+    th, td {{ border: 0.5pt solid #000; padding: 2px; text-align: center; white-space: nowrap; }}
+    .bg-dw-head {{ background-color: #4472C4; color: white; -webkit-print-color-adjust: exact; }}
+    .bg-sh-head {{ background-color: #BDD7EE; color: black; -webkit-print-color-adjust: exact; }}
+    .bg-bolin-head {{ background-color: #F8CBAD; color: black; -webkit-print-color-adjust: exact; }}
+    .bg-weekend {{ background-color: #FFD966; -webkit-print-color-adjust: exact; }}
+    .bg-total   {{ background-color: #E2EFDA; -webkit-print-color-adjust: exact; }}
+    .bg-grand   {{ background-color: #FFC107; -webkit-print-color-adjust: exact; }}
+    .left {{ text-align: left; }} .right {{ text-align: right; }}
+    .remarks {{ margin-top: 10px; font-size: 9px; text-align: left; white-space: pre-wrap; }}
+    </style></head><body>
+    <div style="margin-bottom:10px;">
+        <div style="font-size:16px; font-weight:bold; text-align:center;">Media Schedule</div>
+        <b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br>
+        <b>Period：</b>{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')} &nbsp; <b>Medium：</b>全家廣播/新鮮視/家樂福
+    </div>
+    <table><thead><tr>{th_fixed}{date_th1}<th class='{header_cls}' rowspan='2'>檔次</th></tr><tr>{date_th2}</tr></thead>
+    <tbody>{tbody}{tfoot}{footer_rows}</tbody></table>
+    <div class="remarks"><b>Remarks：</b><br>{"<br>".join([html_escape(x) for x in remarks])}</div></body></html>"""
+
+def load_font_base64():
+    font_path = "NotoSansTC-Regular.ttf"
+    if os.path.exists(font_path):
+        with open(font_path, "rb") as f: return base64.b64encode(f.read()).decode("utf-8")
+    try:
+        r = requests.get("https://github.com/googlefonts/noto-cjk/raw/main/Sans/TTF/TraditionalChinese/NotoSansTC-Regular.ttf", timeout=15)
+        if r.status_code == 200:
+            with open(font_path, "wb") as f: f.write(r.content)
+            return base64.b64encode(r.content).decode("utf-8")
+    except: pass
+    return None
+
+with st.sidebar:
+    st.header("🕵️ 主管登入")
+    if not st.session_state.is_supervisor:
+        pwd = st.text_input("輸入密碼", type="password", key="pwd_input")
+        if st.button("登入"):
+            if pwd == "1234": st.session_state.is_supervisor = True; st.rerun()
+            else: st.error("密碼錯誤")
+    else:
+        st.success("✅ 目前狀態：主管模式"); 
+        if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
+
+st.title("📺 媒體 Cue 表生成器 (v92.1)")
+format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
+
+c1, c2, c3, c4 = st.columns(4)
+with c1: client_name = st.text_input("客戶名稱", "萬國通路")
+with c2: product_name = st.text_input("產品名稱", "統一布丁")
+with c3: total_budget_input = st.number_input("總預算 (未稅 Net)", value=1000000, step=10000)
+with c4: prod_cost_input = st.number_input("製作費 (未稅)", value=0, step=1000)
+
+final_budget_val = total_budget_input
+if st.session_state.is_supervisor:
+    st.markdown("---")
+    col_sup1, col_sup2 = st.columns([1, 2])
+    with col_sup1: st.error("🔒 [主管] 專案優惠價覆寫")
+    with col_sup2:
+        override_val = st.number_input("輸入最終成交價", value=total_budget_input)
+        if override_val != total_budget_input: final_budget_val = override_val; st.caption(f"⚠️ 使用 ${final_budget_val:,} 結算")
+    st.markdown("---")
+
+c5, c6 = st.columns(2)
+with c5: start_date = st.date_input("開始日", datetime(2026, 1, 1))
+with c6: end_date = st.date_input("結束日", datetime(2026, 1, 31))
+days_count = (end_date - start_date).days + 1
+st.info(f"📅 走期共 **{days_count}** 天")
+
+with st.expander("📝 備註欄位設定", expanded=False):
+    rc1, rc2, rc3 = st.columns(3)
+    sign_deadline = rc1.date_input("回簽截止日", datetime.now() + timedelta(days=3))
+    billing_month = rc2.text_input("請款月份", "2026年2月")
+    payment_date = rc3.date_input("付款兌現日", datetime(2026, 3, 31))
+
+st.markdown("### 3. 媒體投放設定")
+if "rad_share" not in st.session_state: st.session_state.rad_share = 100
+if "fv_share" not in st.session_state: st.session_state.fv_share = 0
+if "cf_share" not in st.session_state: st.session_state.cf_share = 0
+
+def on_media_change():
+    active = []
+    if st.session_state.get("cb_rad"): active.append("rad_share")
+    if st.session_state.get("cb_fv"): active.append("fv_share")
+    if st.session_state.get("cb_cf"): active.append("cf_share")
+    if not active: return
+    share = 100 // len(active)
+    for key in active: st.session_state[key] = share
+    rem = 100 - sum([st.session_state[k] for k in active])
+    st.session_state[active[0]] += rem
+
+def on_slider_change(changed_key):
+    active = []
+    if st.session_state.get("cb_rad"): active.append("rad_share")
+    if st.session_state.get("cb_fv"): active.append("fv_share")
+    if st.session_state.get("cb_cf"): active.append("cf_share")
+    others = [k for k in active if k != changed_key]
+    if not others: st.session_state[changed_key] = 100
+    elif len(others) == 1:
+        val = st.session_state[changed_key]
+        st.session_state[others[0]] = max(0, 100 - val)
+    elif len(others) == 2:
+        val = st.session_state[changed_key]
+        rem = max(0, 100 - val)
+        k1, k2 = others[0], others[1]
+        sum_others = st.session_state[k1] + st.session_state[k2]
+        if sum_others == 0: st.session_state[k1] = rem // 2; st.session_state[k2] = rem - st.session_state[k1]
+        else:
+            ratio = st.session_state[k1] / sum_others
+            st.session_state[k1] = int(rem * ratio)
+            st.session_state[k2] = rem - st.session_state[k1]
+
+col_cb1, col_cb2, col_cb3 = st.columns(3)
+with col_cb1: is_rad = st.checkbox("全家廣播", value=True, key="cb_rad", on_change=on_media_change)
+with col_cb2: is_fv = st.checkbox("新鮮視", value=False, key="cb_fv", on_change=on_media_change)
+with col_cb3: is_cf = st.checkbox("家樂福", value=False, key="cb_cf", on_change=on_media_change)
+
+m1, m2, m3 = st.columns(3)
+config = {}
+if is_rad:
+    with m1:
+        st.markdown("#### 📻 全家廣播")
+        is_nat = st.checkbox("全省聯播", True, key="rad_nat")
+        regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=REGIONS_ORDER, key="rad_reg")
+        if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
+        secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
+        st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
+        sec_shares = {}
+        if len(secs) > 1:
+            rem = 100; sorted_secs = sorted(secs)
+            for i, s in enumerate(sorted_secs):
+                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}"); sec_shares[s] = v; rem -= v
+                else: sec_shares[s] = rem
+        elif secs: sec_shares[secs[0]] = 100
+        config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
+
+if is_fv:
+    with m2:
+        st.markdown("#### 📺 新鮮視")
+        is_nat = st.checkbox("全省聯播", False, key="fv_nat")
+        regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=["北區"], key="fv_reg")
+        if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
+        secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
+        st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
+        sec_shares = {}
+        if len(secs) > 1:
+            rem = 100; sorted_secs = sorted(secs)
+            for i, s in enumerate(sorted_secs):
+                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}"); sec_shares[s] = v; rem -= v
+                else: sec_shares[s] = rem
+        elif secs: sec_shares[secs[0]] = 100
+        config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
+
+if is_cf:
+    with m3:
+        st.markdown("#### 🛒 家樂福")
+        secs = st.multiselect("秒數", DURATIONS, [20], key="cf_sec")
+        st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
+        sec_shares = {}
+        if len(secs) > 1:
+            rem = 100; sorted_secs = sorted(secs)
+            for i, s in enumerate(sorted_secs):
+                if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"cs_{s}"); sec_shares[s] = v; rem -= v
+                else: sec_shares[s] = rem
+        elif secs: sec_shares[secs[0]] = 100
+        config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
+
+if config:
+    rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count)
+    prod_cost = prod_cost_input 
+    vat = int(round(final_budget_val * 0.05))
+    grand_total = final_budget_val + vat
+    p_str = f"{'、'.join([f'{s}秒' for s in sorted(list(set(r['seconds'] for r in rows)))])} {product_name}"
+    rem = get_remarks_text(sign_deadline, billing_month, payment_date)
+    html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
+    st.components.v1.html(html_preview, height=700, scrolling=True)
+    with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
+        for log in logs:
+            st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
+            if 'Details' in log:
+                for detail in log['Details']: st.info(detail)
+            st.divider()
+    col_dl1, col_dl2 = st.columns(2)
+    with col_dl2:
+        try:
+            xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
+            pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
+            if pdf_bytes: st.download_button(f"📥 下載 PDF ({method})", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl")
+            else: 
+                pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
+                if pdf_bytes: st.download_button("📥 下載 PDF (Web)", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl_web")
+        except: pass
+    with col_dl1:
+        if st.session_state.is_supervisor:
+            if rows:
+                try:
+                    xlsx = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
+                    st.download_button("📥 下載 Excel (主管權限)", xlsx, f"Cue_{safe_filename(client_name)}.xlsx", key="xlsx_dl")
+                except Exception as e: st.error(f"Excel Error: {e}")
+        else: st.info("🔒 Excel 下載功能僅限主管使用")
