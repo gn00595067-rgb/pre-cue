@@ -3,7 +3,7 @@ import streamlit as st
 # =========================================================
 # 1. 頁面設定 (必須是第一個 st 指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v96.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v97.0")
 
 import pandas as pd
 import math
@@ -29,9 +29,9 @@ BS_THIN = 'thin'
 BS_MEDIUM = 'medium'
 BS_HAIR = 'hair'
 
-# Money Format
+# Formats
 FMT_MONEY = '"$"#,##0_);[Red]("$"#,##0)' 
-FMT_NUMBER = '#,##0'
+FMT_NUMBER = '#,##0' # [FIX] All numbers get commas
 
 # =========================================================
 # 3. 初始化 Session State
@@ -92,7 +92,7 @@ def draw_outer_border(ws, min_r, max_r, min_c, max_c):
                        right=BS_MEDIUM if c == max_c else None)
 
 # =========================================================
-# 5. PDF / Font 策略
+# 5. PDF 策略
 # =========================================================
 def find_soffice_path():
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
@@ -140,18 +140,6 @@ def html_to_pdf_weasyprint(html_str):
         pdf_bytes = HTML(string=html_str).write_pdf(stylesheets=[css], font_config=font_config)
         return pdf_bytes, ""
     except Exception as e: return None, str(e)
-
-def load_font_base64():
-    font_path = "NotoSansTC-Regular.ttf"
-    if os.path.exists(font_path):
-        with open(font_path, "rb") as f: return base64.b64encode(f.read()).decode("utf-8")
-    try:
-        r = requests.get("https://github.com/googlefonts/noto-cjk/raw/main/Sans/TTF/TraditionalChinese/NotoSansTC-Regular.ttf", timeout=15)
-        if r.status_code == 200:
-            with open(font_path, "wb") as f: f.write(r.content)
-            return base64.b64encode(r.content).decode("utf-8")
-    except: pass
-    return None
 
 # =========================================================
 # 6. 核心資料設定
@@ -786,7 +774,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     out = io.BytesIO(); wb.save(out); return out.getvalue()
 
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
-    # Re-implemented HTML Preview with Infinite Scroll & New Medium Logic
     eff_days = days_cnt
     header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
     if format_type == "Bolin": header_cls = "bg-bolin-head"
@@ -794,34 +781,52 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     date_th1 = ""; date_th2 = ""; curr = start_dt; weekdays = ["一", "二", "三", "四", "五", "六", "日"]
     for i in range(eff_days):
         wd = curr.weekday(); 
-        # Weekend color logic for Preview:
-        # Dongwu/Shenghuo/Bolin all color Row 8 (date_th2 here) if weekend
         bg = "bg-weekend" if wd >= 5 else ""
         date_th1 += f"<th class='{header_cls} col_day'>{curr.day}</th>"; date_th2 += f"<th class='{bg} col_day'>{weekdays[wd]}</th>"; curr += timedelta(days=1)
 
     cols_def = ["Station", "Location", "Program", "Day-part", "Size", "rate<br>(Net)", "Package-cost<br>(Net)"]
+    if format_type == "Shenghuo": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "秒數/規格"]
+    elif format_type == "Bolin": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "規格"]
+
     th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
     
     unique_media = sorted(list(set([r['media'] for r in rows])))
     medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
 
     tbody = ""
-    # Simplified rendering for preview to avoid complexity
     for r in rows:
         tbody += "<tr>"
-        tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{r['rate_display']}</td><td>{r['pkg_display']}</td>"
+        # Adjust display based on format
+        if format_type == "Shenghuo":
+             # Use simplified or specific text
+             sec_txt = f"{r['seconds']}秒"
+             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td>"
+        elif format_type == "Bolin":
+             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}秒</td>"
+        else: # Dongwu
+             tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{r['rate_display']}</td><td>{r['pkg_display']}</td>"
+        
         for d in r['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
         tbody += "</tr>"
         
-    # Remarks in HTML
     remarks_html = "<br>".join([html_escape(x) for x in remarks])
+    
+    # Footer
+    vat = int(round(budget * 0.05))
+    footer_html = f"""
+    <div style="margin-top:10px; font-weight:bold;">
+        製作費: ${prod:,}<br>
+        5% VAT: ${vat:,}<br>
+        Grand Total: ${grand_total:,}
+    </div>
+    """
 
     return f"""<html><head><style>
     body {{ font-family: sans-serif; font-size: 10px; }}
-    table {{ border-collapse: collapse; }}
-    th, td {{ border: 0.5pt solid #000; padding: 2px; text-align: center; white-space: nowrap; }}
+    table {{ border-collapse: collapse; width: 100%; }}
+    th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }}
     .bg-dw-head {{ background-color: #4472C4; color: white; }}
-    .bg-sh-head {{ background-color: white; color: black; }}
+    .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }}
     .bg-bolin-head {{ background-color: #F8CBAD; color: black; }}
     .bg-weekend {{ background-color: #FFFFCC; }}
     </style></head><body>
@@ -833,7 +838,8 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     <table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead>
     <tbody>{tbody}</tbody></table>
     </div>
-    <div style="margin-top:10px; font-size:9px;">
+    {footer_html}
+    <div style="margin-top:10px; font-size:11px;">
         <b>Remarks：</b><br>{remarks_html}
     </div>
     </body></html>"""
@@ -849,7 +855,7 @@ with st.sidebar:
         st.success("✅ 目前狀態：主管模式"); 
         if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v95.0)")
+st.title("📺 媒體 Cue 表生成器 (v96.0)")
 format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
 c1, c2, c3, c4, c5_sales = st.columns(5)
