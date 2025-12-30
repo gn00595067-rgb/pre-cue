@@ -186,7 +186,7 @@ def get_remarks_text(sign_deadline, billing_month, payment_date):
     ]
 
 # =========================================================
-# 5. 核心計算函式 (Detailed Debug Version)
+# 5. 核心計算函式 (Fix Debug & Logic)
 # =========================================================
 def calculate_plan_data(config, total_budget, days_count):
     rows = []
@@ -230,27 +230,22 @@ def calculate_plan_data(config, total_budget, days_count):
                 if spots_final % 2 != 0: spots_final += 1
                 if spots_final == 0: spots_final = 2
 
-                # [DEBUG]
-                log_entry = {
-                    "Media": f"{m} ({sec}s)",
-                    "Budget": f"${s_budget:,.0f}",
-                    "Status": f"執行 {spots_final} 檔 ({status_msg})",
-                    "Details": []
-                }
-
+                # [DEBUG] Populate Log
+                log_details = []
+                
                 sch = calculate_schedule(spots_final, days_count)
-
                 nat_pkg_display = 0
+                
                 if cfg["is_national"]:
                     nat_list = db["全省"][0]
                     nat_unit_price = int((nat_list / db["Std_Spots"]) * factor * total_display_penalty)
                     nat_pkg_display = nat_unit_price * spots_final
                     total_list_accum += nat_pkg_display
                     
-                    log_entry["Details"].append(
-                        f"**全省 Package**: ${nat_pkg_display:,}\n"
-                        f"- 公式: 牌價${nat_list:,} ÷ 標準{db['Std_Spots']}檔 x 秒數{factor} x 懲罰{total_display_penalty} = 單價${nat_unit_price:,}\n"
-                        f"- 總價: ${nat_unit_price:,} x {spots_final}檔"
+                    log_details.append(
+                        f"**全省總價**: ${nat_pkg_display:,}\n"
+                        f"- 公式: (牌價${nat_list:,} / 標準{db['Std_Spots']}檔 * 秒數{factor} * 懲罰{total_display_penalty}) = 單價 ${nat_unit_price:,}\n"
+                        f"- 計算: ${nat_unit_price:,} x {spots_final}檔"
                     )
 
                 for i, r in enumerate(display_regs):
@@ -260,10 +255,10 @@ def calculate_plan_data(config, total_budget, days_count):
                     row_pkg_display = total_rate_display
                     if not cfg["is_national"]:
                         total_list_accum += row_pkg_display
-                        log_entry["Details"].append(
+                        log_details.append(
                             f"**{r}**: ${total_rate_display:,}\n"
-                            f"- 公式: 牌價${list_price_region:,} ÷ 標準{db['Std_Spots']}檔 x 秒數{factor} x 懲罰{row_display_penalty} = 單價${unit_rate_display:,}\n"
-                            f"- 總價: ${unit_rate_display:,} x {spots_final}檔"
+                            f"- 公式: (牌價${list_price_region:,} / 標準{db['Std_Spots']}檔 * 秒數{factor} * 懲罰{row_display_penalty}) = 單價 ${unit_rate_display:,}\n"
+                            f"- 計算: ${unit_rate_display:,} x {spots_final}檔"
                         )
 
                     rows.append({
@@ -277,7 +272,12 @@ def calculate_plan_data(config, total_budget, days_count):
                         "nat_pkg_display": nat_pkg_display
                     })
                 
-                debug_logs.append(log_entry)
+                debug_logs.append({
+                    "Media": f"{m} ({sec}s)",
+                    "Budget": f"${s_budget:,.0f}",
+                    "Status": f"執行 {spots_final} 檔 ({status_msg})",
+                    "Details": log_details
+                })
 
             # --- 家樂福 ---
             elif m == "家樂福":
@@ -286,6 +286,8 @@ def calculate_plan_data(config, total_budget, days_count):
                 unit_net = (db["量販_全省"]["Net"] / base_std) * factor
                 spots_init = math.ceil(s_budget / unit_net)
                 penalty = 1.1 if spots_init < base_std else 1.0
+                status_msg = "未達標 x1.1" if penalty > 1 else "達標"
+                
                 spots_final = math.ceil(s_budget / (unit_net * penalty))
                 if spots_final % 2 != 0: spots_final += 1
                 sch_h = calculate_schedule(spots_final, days_count)
@@ -295,17 +297,18 @@ def calculate_plan_data(config, total_budget, days_count):
                 total_rate_h = unit_rate_h * spots_final
                 total_list_accum += total_rate_h
                 
-                log_entry = {
+                log_details = [
+                    f"**量販總價**: ${total_rate_h:,}\n"
+                    f"- 公式: (牌價${base_list:,} / 標準{base_std}檔 * 秒數{factor} * 懲罰{penalty}) = 單價 ${unit_rate_h:,}\n"
+                    f"- 計算: ${unit_rate_h:,} x {spots_final}檔"
+                ]
+                
+                debug_logs.append({
                     "Media": f"家樂福 ({sec}s)",
                     "Budget": f"${s_budget:,.0f}",
-                    "Status": f"執行 {spots_final} 檔 (懲罰 x{penalty})",
-                    "Details": [
-                        f"**量販總價**: ${total_rate_h:,}\n"
-                        f"- 公式: 牌價${base_list:,} ÷ 標準{base_std}檔 x 秒數{factor} x 懲罰{penalty} = 單價${unit_rate_h:,}\n"
-                        f"- 總價: ${unit_rate_h:,} x {spots_final}檔"
-                    ]
-                }
-                debug_logs.append(log_entry)
+                    "Status": f"執行 {spots_final} 檔 ({status_msg})",
+                    "Details": log_details
+                })
                 
                 rows.append({"media": m, "region": "全省量販", "program_num": STORE_COUNTS_NUM["家樂福_量販"], "daypart": db["量販_全省"]["Day_Part"], "seconds": sec, "spots": spots_final, "schedule": sch_h, "rate_display": total_rate_h, "pkg_display": total_rate_h, "is_pkg_member": False})
                 
@@ -544,6 +547,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         curr_row = render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
 
     curr_row += 1
+    # Grand Total = Budget + VAT (Prod excluded)
     vat = int(round(final_budget_val * 0.05))
     grand_total = final_budget_val + vat
     
@@ -766,7 +770,8 @@ if is_cf:
 if config:
     rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count)
     
-    prod_cost = prod_cost_input # Unified variable
+    # [FIX] Vars
+    prod_cost = prod_cost_input
     vat = int(round(final_budget_val * 0.05))
     grand_total = final_budget_val + vat
     
