@@ -1,5 +1,8 @@
 import streamlit as st
-# 1. 頁面設定 (必須在最前面)
+
+# =========================================================
+# 1. 頁面設定 (必須是第一個 st 指令，修復白屏關鍵)
+# =========================================================
 st.set_page_config(layout="wide", page_title="Cue Sheet Pro v93.0")
 
 import pandas as pd
@@ -53,6 +56,7 @@ def html_escape(s):
 # ----------------- OpenPyXL Helpers -----------------
 def set_border(cell, top=None, bottom=None, left=None, right=None):
     cur = cell.border
+    # If explicit None is passed, keep existing. If style string passed, use it.
     t = top if top is not None else (cur.top.style if cur.top else None)
     b = bottom if bottom is not None else (cur.bottom.style if cur.bottom else None)
     l = left if left is not None else (cur.left.style if cur.left else None)
@@ -357,7 +361,7 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     for r, h in ROW_HEIGHTS.items(): ws.row_dimensions[r].height = h
     ws['A1'] = "Media Schedule"; ws.merge_cells("A1:AM1")
     style_range(ws, "A1:AM1", font=Font(name=FONT_MAIN, size=48, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
-    for c in range(1, 40): ws.cell(3, c).border = Border(top=Side(style=BS_MEDIUM))
+    for c in range(1, 40): set_border(ws.cell(3, c), top=BS_MEDIUM)
     info_map = {"A3": ("客戶名稱：", client_name), "A4": ("Product：", product_display_str), "A5": ("Period :", f"{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"), "A6": ("Medium :", "全家廣播/新鮮視/家樂福")}
     for addr, (lbl, val) in info_map.items():
         ws[addr] = lbl; ws[addr].font = Font(name=FONT_MAIN, size=14, bold=True); ws[addr].alignment = Alignment(vertical='center')
@@ -366,7 +370,8 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
     headers = [("A","Station"), ("B","Location"), ("C","Program"), ("D","Day-part"), ("E","Size"), ("F","rate\n(Net)"), ("G","Package-cost\n(Net)")]
     for col, txt in headers:
         ws[f"{col}7"] = txt; ws.merge_cells(f"{col}7:{col}8")
-        style_range(ws, f"{col}7:{col}8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center', wrap_text=True), border=Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_THIN), right=Side(style=BS_THIN)))
+        style_range(ws, f"{col}7:{col}8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center', wrap_text=True))
+        set_border(ws.cell(7, column_index_from_string(col)), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
     curr = start_dt; eff_days = (end_dt - start_dt).days + 1
     for i in range(31):
         col_idx = 8 + i; d_cell = ws.cell(7, col_idx); w_cell = ws.cell(8, col_idx)
@@ -379,10 +384,11 @@ def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, 
         set_border(d_cell, top=BS_MEDIUM, bottom=BS_THIN, left=BS_THIN, right=BS_THIN)
         set_border(w_cell, top=BS_THIN, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
     ws['AM7'] = "檔次"; ws.merge_cells("AM7:AM8")
-    style_range(ws, "AM7:AM8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center'), border=Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), left=Side(style=BS_THIN), right=Side(style=BS_THIN)))
+    style_range(ws, "AM7:AM8", font=Font(name=FONT_MAIN, size=14), alignment=Alignment(horizontal='center', vertical='center'))
+    set_border(ws['AM7'], top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
     return render_data_rows(ws, rows, 9, final_budget_val, eff_days, "Dongwu", product_display_str)
 
-# ----------------- Shenghuo Engine (Infinite + White + Custom Format) -----------------
+# ----------------- Shenghuo Engine (Infinite + White + Format Fix) -----------------
 def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, remarks_list, final_budget_val, prod_cost):
     days_n = (end_dt - start_dt).days + 1
     
@@ -408,12 +414,14 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         for c in range(1, total_cols + 1):
             cell = ws.cell(r, c)
             cell.font = Font(name=FONT_MAIN, size=14, bold=True)
+            # Remove any fill (Default is None/White)
             set_border(cell, top=BS_MEDIUM, bottom=BS_MEDIUM)
             if c==1: set_border(cell, left=BS_MEDIUM)
             if c==total_cols: set_border(cell, right=BS_MEDIUM)
 
     ws['A5'] = "客戶名稱："; ws['B5'] = client_name
     ws['F5'] = "廣告規格："; 
+    
     unique_secs = sorted(list(set([r['seconds'] for r in rows])))
     ws['H5'] = " ".join([f"{s}秒廣告" for s in unique_secs])
 
@@ -459,9 +467,7 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_name_raw, rows, r
         c = end_c_start + i
         ws.merge_cells(start_row=7, start_column=c, end_row=8, end_column=c)
         ws.cell(7, c).value = h
-        style_range(ws, f"{get_column_letter(c)}7:{get_column_letter(c)}8",
-                    font=Font(name=FONT_MAIN, size=14, bold=True),
-                    alignment=Alignment(horizontal='center', vertical='center'))
+        style_range(ws, f"{get_column_letter(c)}7:{get_column_letter(c)}8", font=Font(name=FONT_MAIN, size=14, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
         set_border(ws.cell(7, c), top=BS_MEDIUM, bottom=BS_HAIR, left=BS_HAIR, right=BS_HAIR)
     
     set_border(ws.cell(7, total_cols), top=BS_MEDIUM, right=BS_MEDIUM, left=BS_HAIR)
@@ -514,6 +520,8 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_name_raw, rows, rema
         cell = ws.cell(7, c); cell.value = curr; cell.number_format = 'm/d'
         cell.fill = header_fill; cell.font = Font(name=FONT_MAIN, size=10, bold=True); cell.alignment = Alignment(horizontal='center', vertical='center')
         set_border(cell, top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
+        # Bolin has only 1 header row (Row 7), so color Row 7 if weekend
+        if curr.weekday() >= 5: cell.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
         curr += timedelta(days=1)
 
     end_h = ["總檔次", "單價", "金額"]
