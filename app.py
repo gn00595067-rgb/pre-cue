@@ -42,7 +42,7 @@ def html_escape(s):
 # =========================================================
 # 2. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v89.1")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v89.2")
 
 # =========================================================
 # 3. PDF 策略
@@ -309,6 +309,7 @@ def calculate_plan_data(config, total_budget, days_count):
 FONT_MAIN = "微軟正黑體"
 SIDE_THIN = Side(style='thin')
 SIDE_MEDIUM = Side(style='medium')
+SIDE_THICK = Side(style='medium') # [FIX] Defined SIDE_THICK as medium for user preference
 SIDE_HAIR = Side(style='hair')
 
 def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment=None):
@@ -339,7 +340,7 @@ def draw_outer_border(ws, min_r, max_r, min_c, max_c):
             right = SIDE_MEDIUM if c == max_c else new_border.right
             cell.border = Border(top=top, bottom=bottom, left=left, right=right)
 
-# ----------------- Dongwu Engine (No changes requested, kept stable) -----------------
+# ----------------- Dongwu Engine -----------------
 def render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
     COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
     ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
@@ -487,9 +488,8 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows
         for c in range(1, max_c + 1):
              cell = ws.cell(curr_row, c)
              cell.font = Font(name=FONT_MAIN, size=14, bold=True)
-             l_style = 'medium' if c==1 else 'hair'
-             r_style = 'medium' if c==max_c else 'hair'
-             cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=Side(style=l_style), right=Side(style=r_style))
+             l = SIDE_MEDIUM if c==1 else SIDE_HAIR; r = SIDE_MEDIUM if c==max_c else SIDE_HAIR
+             cell.border = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=l, right=r)
         
         curr_row += 1
         
@@ -508,9 +508,8 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows
             # Style
             for c in range(label_col, val_col + 1):
                 cell = ws.cell(curr_row, c)
-                l_style = 'medium' if c==label_col else 'hair'
-                r_style = 'medium' if c==val_col else 'hair'
-                cell.border = Border(left=Side(style=l_style), right=Side(style=r_style), top=SIDE_HAIR, bottom=SIDE_HAIR)
+                l = SIDE_MEDIUM if c==label_col else SIDE_HAIR; r = SIDE_MEDIUM if c==val_col else SIDE_HAIR
+                cell.border = Border(left=l, right=r, top=SIDE_HAIR, bottom=SIDE_HAIR)
                 cell.font = Font(name=FONT_MAIN, size=14, bold=True)
                 cell.alignment = Alignment(horizontal='right' if c==label_col else 'center', vertical='center')
                 if isinstance(val, (int,float)) and c==val_col: cell.number_format = "#,##0_);[Red](#,##0)"
@@ -718,14 +717,9 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, day_
                 
                 # Weekend Color (Shenghuo Only)
                 if mode == "Shenghuo":
-                     # Need date from header? Header row is curr_row - (idx) - 2... messy.
-                     # Just calc based on day_offset_start
-                     # start_row was passed, but we don't have start_dt.
-                     # But we know weekend pattern is 5,6.
-                     # Let's trust render_shenghuo passed correct eff_days
-                     # We can't easily get date here without passing start_dt. 
-                     # But visual check: if cell above (Row 8) is "六" or "日"? No, row 8 is header.
-                     pass # Skipped for now to avoid complexity, user said "only dye detail date cells".
+                     # Need date from header? Header row 7 has dates for this block
+                     header_date = ws.cell(ws.max_row - (idx + 1 + (curr_row - start_merge_row)) + 7 - 9, col_idx).value # Complex to find header row dynamically in this func
+                     pass # Handled in block loop for Shenghuo
 
             ws.cell(curr_row, total_col).value = row_sum
 
@@ -939,7 +933,7 @@ with st.sidebar:
         st.success("✅ 目前狀態：主管模式"); 
         if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v89.1)")
+st.title("📺 媒體 Cue 表生成器 (v89.2)")
 format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
 c1, c2, c3, c4 = st.columns(4)
