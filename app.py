@@ -42,7 +42,7 @@ def html_escape(s):
 # =========================================================
 # 2. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v81.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v81.1")
 
 # =========================================================
 # 3. PDF 策略
@@ -411,9 +411,8 @@ def render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows
 
 # ----------------- Bolin Engine (NEW) -----------------
 def render_bolin(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val):
-    # Bolin Config (Similiar to Shenghuo but with TO/FROM)
     COL_WIDTHS = {'A': 20, 'B': 22, 'C': 10, 'D': 15, 'E': 10, 'F': 5}
-    ROW_HEIGHTS = {1: 60, 2: 25, 3: 25, 4: 25, 5: 25, 6: 25, 7: 35} # More meta rows
+    ROW_HEIGHTS = {1: 60, 2: 25, 3: 25, 4: 25, 5: 25, 6: 25, 7: 35}
     for k, v in COL_WIDTHS.items(): ws.column_dimensions[k].width = v
     for i in range(7, 38): ws.column_dimensions[get_column_letter(i)].width = 5
     ws.column_dimensions['AL'].width = 8; ws.column_dimensions['AM'].width = 12; ws.column_dimensions['AN'].width = 12
@@ -422,20 +421,15 @@ def render_bolin(ws, start_dt, end_dt, client_name, product_display_str, rows, r
     ws['A1'] = "Media Schedule"; ws.merge_cells("A1:AN1")
     style_range(ws, "A1:AN1", font=Font(name=FONT_MAIN, size=42, bold=True), alignment=Alignment(horizontal='center', vertical='center'))
     
-    # Meta (Row 2-5)
     info_map = {
-        "A2": ("TO：", client_name),
-        "A3": ("FROM：", "鉑霖行動行銷 許雅婷 TINA"),
-        "A4": ("客戶名稱：", client_name),
-        "A5": ("廣告名稱：", product_display_str),
-        "G4": ("廣告規格：", "20秒/15秒"),
-        "AE4": ("執行期間：", f"{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}")
+        "A2": ("TO：", client_name), "A3": ("FROM：", "鉑霖行動行銷 許雅婷 TINA"),
+        "A4": ("客戶名稱：", client_name), "A5": ("廣告名稱：", product_display_str),
+        "G4": ("廣告規格：", "20秒/15秒"), "AE4": ("執行期間：", f"{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}")
     }
     for addr, (lbl, val) in info_map.items():
         ws[addr] = lbl; ws[addr].font = Font(name=FONT_MAIN, size=13, bold=True)
         val_cell = ws.cell(ws[addr].row, ws[addr].column + 1); val_cell.value = val; val_cell.font = Font(name=FONT_MAIN, size=13)
 
-    # Table Header (Row 7)
     headers = ["頻道", "播出地區", "播出店數", "播出時間", "規格"]
     for i, h in enumerate(headers):
         cell = ws.cell(7, i+1); cell.value = h
@@ -486,7 +480,6 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
             ws.cell(curr_row, 4).value = r_data["daypart"]
             ws.cell(curr_row, 5).value = f"{r_data['seconds']}秒"
             
-            # Rate & Package Cols
             rate_val = r_data["rate_display"]
             pkg_val = r_data["pkg_display"]
             if r_data.get("is_pkg_member") and idx == 0: pkg_val = r_data["nat_pkg_display"]
@@ -496,12 +489,11 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
                 ws.cell(curr_row, 6).value = rate_val
                 ws.cell(curr_row, 7).value = pkg_val
                 sch_start_col = 8; total_col = 39
-            else: # Shenghuo / Bolin
+            else: 
                 sch_start_col = 6; total_col = 37
-                ws.cell(curr_row, 38).value = rate_val # Unit Price
-                ws.cell(curr_row, 39).value = pkg_val  # Total Amount
+                ws.cell(curr_row, 38).value = rate_val 
+                ws.cell(curr_row, 39).value = pkg_val
 
-            # Schedule
             sch = r_data["schedule"]; row_sum = 0
             for d_idx in range(31):
                 col_idx = sch_start_col + d_idx; cell = ws.cell(curr_row, col_idx)
@@ -510,7 +502,6 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
             
             ws.cell(curr_row, total_col).value = row_sum
 
-            # Style
             for c in range(1, ws.max_column + 1):
                 cell = ws.cell(curr_row, c)
                 cell.font = base_font
@@ -518,7 +509,6 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
                 cell.border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
             curr_row += 1
 
-        # Merges
         if curr_row > start_merge_row:
             ws.merge_cells(start_row=start_merge_row, start_column=1, end_row=curr_row-1, end_column=1)
         
@@ -526,7 +516,6 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode):
             if mode == "Dongwu": ws.merge_cells(start_row=start_merge_row, start_column=7, end_row=curr_row-1, end_column=7)
             else: ws.merge_cells(start_row=start_merge_row, start_column=39, end_row=curr_row-1, end_column=39)
 
-    # Total Row
     ws.row_dimensions[curr_row].height = FOOTER_ROW_HEIGHT
     label_col = 6 if mode == "Dongwu" else 36
     total_val_col = 7 if mode == "Dongwu" else 39
@@ -577,7 +566,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         curr_row = render_dongwu(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
     elif format_type == "Shenghuo":
         curr_row = render_shenghuo(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
-    else: # Bolin
+    else: 
         curr_row = render_bolin(ws, start_dt, end_dt, client_name, product_display_str, rows, remarks_list, final_budget_val)
 
     curr_row += 1
@@ -642,7 +631,7 @@ with st.sidebar:
             st.session_state.is_supervisor = False
             st.rerun()
 
-st.title("📺 媒體 Cue 表生成器 (v81.0)")
+st.title("📺 媒體 Cue 表生成器 (v81.1)")
 
 st.markdown("### 1. 選擇格式")
 format_type = st.radio("", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
@@ -803,11 +792,16 @@ if is_cf:
 if config:
     rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count)
     
-    prod_cost = prod_cost_input
+    prod_cost = prod_cost_input 
     vat = int(round(final_budget_val * 0.05))
     grand_total = final_budget_val + vat
+    
     p_str = f"{'、'.join([f'{s}秒' for s in sorted(list(set(r['seconds'] for r in rows)))])} {product_name}"
     rem = get_remarks_text(sign_deadline, billing_month, payment_date)
+
+    # Simplified HTML preview generator for stability
+    html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
+    st.components.v1.html(html_preview, height=700, scrolling=True)
 
     with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
         for log in logs:
@@ -827,7 +821,9 @@ if config:
             if pdf_bytes:
                 st.download_button(f"📥 下載 PDF ({method})", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl")
             else:
-                st.warning("⚠️ 本地轉檔失敗，請聯絡管理員")
+                st.warning(f"本地轉檔失敗，使用網頁版 PDF")
+                pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
+                if pdf_bytes: st.download_button("📥 下載 PDF (Web)", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl_web")
         except: pass
 
     with col_dl1:
