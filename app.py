@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v106.0 (Cached)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v106.1 (Fix)")
 
 import pandas as pd
 import math
@@ -76,7 +76,7 @@ def find_soffice_path():
     return None
 
 def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
-    # 使用 LibreOffice 轉檔，確保格式還原度 (v102+ 邏輯)
+    # 使用 LibreOffice 轉檔，確保格式還原度
     soffice = find_soffice_path()
     if not soffice: 
         return None, "Fail", "伺服器未安裝 LibreOffice"
@@ -85,7 +85,6 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
             xlsx_path = os.path.join(tmp, "cue.xlsx")
             with open(xlsx_path, "wb") as f: f.write(xlsx_bytes)
             
-            # 延長 timeout 到 60 秒，避免大檔轉檔失敗
             subprocess.run(
                 [soffice, "--headless", "--nologo", "--convert-to", "pdf:calc_pdf_Export", "--outdir", tmp, xlsx_path], 
                 capture_output=True, 
@@ -205,6 +204,19 @@ def calculate_schedule(total_spots, days):
     base, rem = divmod(half_spots, days)
     sch = [base + (1 if i < rem else 0) for i in range(days)]
     return [x * 2 for x in sch]
+
+# [修復] 補回遺失的 get_remarks_text 函式
+def get_remarks_text(sign_deadline, billing_month, payment_date):
+    d_str = sign_deadline.strftime("%Y/%m/%d (%a)") if sign_deadline else "____/__/__ (__)"
+    p_str = payment_date.strftime("%Y/%m/%d") if payment_date else "____/__/__"
+    return [
+        f"1.請於 {d_str} 11:30前 回簽及進單，方可順利上檔。",
+        "2.以上節目名稱如有異動，以上檔時節目名稱為主，如遇時段滿檔，上檔時間挪後或更換至同級時段。",
+        "3.通路店鋪數與開機率至少七成(以上)。每日因加盟數調整，或遇店舖年度季度改裝、設備維護升級及保修等狀況，會有一定幅度增減。",
+        "4.託播方需於上檔前 5 個工作天，提供廣告帶(mp3)、影片/影像 1920x1080 (mp4)。",
+        f"5.雙方同意費用請款月份 : {billing_month}，如有修正必要，將另行E-Mail告知，並視為正式合約之一部分。",
+        f"6.付款兌現日期：{p_str}"
+    ]
 
 def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factors, store_counts_num, regions_order):
     rows = []; total_list_accum = 0; debug_logs = []
@@ -483,7 +495,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         curr_row = render_data_rows_optimized(ws, rows, 9, final_budget_val, eff_days, "Dongwu", product_display_str_dongwu)
         
-        vat = int(round(final_budget_val * 0.05)); grand_total = final_budget_val + vat
+        curr_row += 1; vat = int(round(final_budget_val * 0.05)); grand_total = final_budget_val + vat
         footer_data = [("製作", prod_cost), ("5% VAT", vat), ("Grand Total", grand_total)]; label_col = 6; val_col = 7
         for label, val in footer_data:
             ws.row_dimensions[curr_row].height = 30
@@ -496,7 +508,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             curr_row += 1
         draw_outer_border(ws, 7, curr_row-1, 1, 39)
         
-        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："; ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
+        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："
+        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
         curr_row += 1
         for rm in remarks_list:
             c = ws.cell(curr_row, 1); c.value = rm; f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
@@ -504,7 +517,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
     elif format_type == "Shenghuo":
         curr_row = render_data_rows_optimized(ws, rows, 9, final_budget_val, (end_dt - start_dt).days + 1, "Shenghuo", product_name)
-        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："; ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
+        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："
+        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
         curr_row += 1
         for rm in remarks_list:
             c = ws.cell(curr_row, 1); c.value = rm; f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
@@ -512,7 +526,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
     else: # Bolin
         curr_row = render_data_rows_optimized(ws, rows, 8, final_budget_val, (end_dt - start_dt).days + 1, "Bolin", product_name)
-        curr_row += 1; ws.cell(curr_row, 9).value = "Remarks："; ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single")
+        curr_row += 1; ws.cell(curr_row, 9).value = "Remarks："
+        ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single")
         curr_row += 1
         for rm in remarks_list:
             c = ws.cell(curr_row, 9); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, bold=True); curr_row += 1
@@ -680,10 +695,6 @@ def main():
             
             st.components.v1.html(html_preview, height=700, scrolling=True)
             
-            with st.expander("💡 系統運算與效能監控", expanded=False):
-                for log in logs:
-                    st.markdown(f"**{log['Media']}**: {log['Status']} (Budget: {log['Budget']})")
-
             st.markdown("---")
             st.subheader("📥 檔案下載區")
             st.info("💡 為了避免畫面卡頓，請確認上方設定無誤後，點擊下方按鈕以生成檔案。")
@@ -694,11 +705,11 @@ def main():
                 try:
                     t0 = time.time()
                     
-                    # 1. 生成 Excel
+                    # 1. 生成 Excel (快速)
                     progress_ph.info("⏳ 步驟 1/2: 正在繪製 Excel 表格...")
                     xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
                     
-                    # 2. 生成 PDF
+                    # 2. 生成 PDF (使用 LibreOffice 原生轉檔)
                     progress_ph.info("⏳ 步驟 2/2: 正在呼叫 LibreOffice 轉檔 PDF (需時約 15-30 秒，請耐心等待)...")
                     pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
                     
