@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.0 (Signature)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.1 (Signature Polish)")
 
 import pandas as pd
 import math
@@ -289,7 +289,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=SIDE_MEDIUM)
 
     # -------------------------------------------------------------
-    # Render Logic: Dongwu (v111.0 Signature)
+    # Render Logic: Dongwu (v111.1 Signature Polish)
     # -------------------------------------------------------------
     def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -431,40 +431,28 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=14, color="FF0000" if is_red else "000000")
 
-        # --- v111.0: Signature Block ---
+        # --- v111.1: Signature Block (Polish) ---
         curr_row += 2 # Spacer
         sig_start = curr_row
         
         # Left Block (Dongwu)
-        # Row 1
-        ws.merge_cells(start_row=sig_start, start_column=1, end_row=sig_start, end_column=7) # A-G
+        ws.merge_cells(start_row=sig_start, start_column=1, end_row=sig_start, end_column=7) 
         c_l1 = ws.cell(sig_start, 1); c_l1.value = "甲    方：東吳廣告股份有限公司"; c_l1.font = FONT_STD; c_l1.alignment = ALIGN_LEFT
-        # Row 2
-        ws.merge_cells(start_row=sig_start+1, start_column=1, end_row=sig_start+1, end_column=7) # A-G
+        ws.merge_cells(start_row=sig_start+1, start_column=1, end_row=sig_start+1, end_column=7) 
         c_l2 = ws.cell(sig_start+1, 1); c_l2.value = "統一編號：20935458"; c_l2.font = FONT_STD; c_l2.alignment = ALIGN_LEFT
         
-        # Right Block (Client) - Position at Col 20 (T) for balance
+        # Right Block (Client)
         right_start_col = 20 # Column T
-        # Row 1
-        ws.merge_cells(start_row=sig_start, start_column=right_start_col, end_row=sig_start, end_column=right_start_col+7) # T-AA
+        ws.merge_cells(start_row=sig_start, start_column=right_start_col, end_row=sig_start, end_column=right_start_col+7) 
         c_r1 = ws.cell(sig_start, right_start_col); c_r1.value = f"乙    方：{client_name}"; c_r1.font = FONT_STD; c_r1.alignment = ALIGN_LEFT
-        # Row 2
         ws.merge_cells(start_row=sig_start+1, start_column=right_start_col, end_row=sig_start+1, end_column=right_start_col+7)
         c_r2 = ws.cell(sig_start+1, right_start_col); c_r2.value = "統一編號："; c_r2.font = FONT_STD; c_r2.alignment = ALIGN_LEFT
-        # Row 3 (Client Signature)
         ws.merge_cells(start_row=sig_start+2, start_column=right_start_col, end_row=sig_start+2, end_column=right_start_col+7)
         c_r3 = ws.cell(sig_start+2, right_start_col); c_r3.value = "客戶簽章："; c_r3.font = FONT_STD; c_r3.alignment = ALIGN_LEFT
 
-        # Draw Grid/Borders for Signature Blocks
-        # Left Block Borders
-        for r in [sig_start, sig_start+1]:
-            for c in range(1, 8): # A-G
-                ws.cell(r, c).border = BORDER_ALL_THIN
-        
-        # Right Block Borders
-        for r in [sig_start, sig_start+1, sig_start+2]:
-            for c in range(right_start_col, right_start_col+8): # T-AA
-                ws.cell(r, c).border = BORDER_ALL_THIN
+        # Polish: Top Border ONLY for the first row of signature block, spanning ALL cols
+        for c_idx in range(1, total_cols + 1):
+            set_border(ws.cell(sig_start, c_idx), top=BS_THIN)
 
         return curr_row + 3
 
@@ -645,7 +633,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.0 Signature)")
+        st.title("📺 媒體 Cue 表生成器 (v111.1 Signature Polish)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
