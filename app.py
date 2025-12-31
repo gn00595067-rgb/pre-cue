@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v110.4 (Dongwu TopLine)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v110.5 (Dongwu Dynamic)")
 
 import pandas as pd
 import math
@@ -289,17 +289,35 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=SIDE_MEDIUM)
 
     # -------------------------------------------------------------
-    # Render Logic: Dongwu (v110.3)
+    # Render Logic: Dongwu (v110.5 Dynamic)
     # -------------------------------------------------------------
     def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod):
+        eff_days = (end_dt - start_dt).days + 1
+        # [Dynamic Column Calculation]
+        # Fixed Cols (A-G) = 7
+        # Date Cols = eff_days
+        # Spots Col = 1
+        # Total = 7 + eff_days + 1
+        spots_col_idx = 7 + eff_days + 1
+        total_cols = spots_col_idx
+
+        # 1. Layout
         COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
         ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
+        
         for k, v in COL_WIDTHS.items(): ws.column_dimensions[k].width = v
-        for i in range(8, 40): ws.column_dimensions[get_column_letter(i)].width = 8.5
-        ws.column_dimensions['AM'].width = 13.0
+        # Dynamic Date Cols Width
+        for i in range(eff_days): ws.column_dimensions[get_column_letter(8+i)].width = 8.5
+        # Spots Col Width
+        ws.column_dimensions[get_column_letter(spots_col_idx)].width = 13.0
+        
         for r, h in ROW_HEIGHTS.items(): ws.row_dimensions[r].height = h
 
-        ws.merge_cells("A1:AM1"); c = ws['A1']; c.value = "Media Schedule"; c.font = FONT_TITLE; c.alignment = ALIGN_CENTER
+        # 2. Title & Info
+        # Merge Title dynamically
+        title_merge_range = f"A1:{get_column_letter(total_cols)}1"
+        ws.merge_cells(title_merge_range); c = ws['A1']; c.value = "Media Schedule"; c.font = FONT_TITLE; c.alignment = ALIGN_CENTER
+        
         unique_media = sorted(list(set([r['media'] for r in rows]))); order = {"全家廣播": 1, "新鮮視": 2, "家樂福": 3}; unique_media.sort(key=lambda x: order.get(x, 99)); medium_str = "/".join(unique_media)
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); p_str = f"{'、'.join([f'{s}秒' for s in unique_secs])} {product_name}"
         infos = [("A3", "客戶名稱：", client_name), ("A4", "Product：", p_str), 
@@ -308,8 +326,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws[pos]; c.value = lbl; c.font = FONT_BOLD; c.alignment = Alignment(vertical='center')
             c2 = ws.cell(c.row, 2); c2.value = val; c2.font = FONT_BOLD; c2.alignment = Alignment(vertical='center')
         
-        # v110.4: Top Border for Row 3 (A3 ~ AM3)
-        for c_idx in range(1, 40): set_border(ws.cell(3, c_idx), top=BS_MEDIUM)
+        # v110.4: Top Border for Row 3 (A3 ~ EndCol)
+        for c_idx in range(1, total_cols + 1): set_border(ws.cell(3, c_idx), top=BS_MEDIUM)
 
         ws['H6'] = f"{start_dt.month}月"; ws['H6'].font = Font(name=FONT_MAIN, size=16, bold=True); ws['H6'].alignment = ALIGN_CENTER
         
@@ -325,23 +343,25 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c7.border = BORDER_ALL_THIN; c8.border = BORDER_ALL_THIN
             set_border(c7, top=BS_MEDIUM); set_border(c8, bottom=BS_MEDIUM)
 
-        eff_days = (end_dt - start_dt).days + 1; curr = start_dt
-        for i in range(31):
+        # Date Headers (Dynamic Range)
+        curr = start_dt
+        for i in range(eff_days):
             col_idx = 8 + i; c_d = ws.cell(7, col_idx); c_w = ws.cell(8, col_idx)
-            if i < eff_days:
-                c_d.value = curr; c_d.number_format = 'm/d'; c_w.value = ["一","二","三","四","五","六","日"][curr.weekday()]
-                if curr.weekday() >= 5: c_w.fill = FILL_WEEKEND
-                curr += timedelta(days=1)
+            c_d.value = curr; c_d.number_format = 'm/d'; c_w.value = ["一","二","三","四","五","六","日"][curr.weekday()]
+            if curr.weekday() >= 5: c_w.fill = FILL_WEEKEND
+            curr += timedelta(days=1)
             c_d.font = FONT_STD; c_w.font = FONT_STD; c_d.alignment = ALIGN_CENTER; c_w.alignment = ALIGN_CENTER
             c_d.border = BORDER_ALL_THIN; c_w.border = BORDER_ALL_THIN
             set_border(c_d, top=BS_MEDIUM); set_border(c_w, bottom=BS_MEDIUM)
 
-        ws['AM7'] = "檔次"; ws.merge_cells("AM7:AM8")
-        ws['AM7'].font = FONT_BOLD; ws['AM7'].alignment = ALIGN_CENTER
-        ws['AM7'].border = BORDER_ALL_THIN; ws['AM8'].border = BORDER_ALL_THIN
-        set_border(ws['AM7'], top=BS_MEDIUM, left=BS_MEDIUM)
-        # v110.3 Fix: AM8 gets medium left border too
-        set_border(ws['AM8'], bottom=BS_MEDIUM, left=BS_MEDIUM)
+        # Spots Header (Dynamic Position)
+        c_spots_7 = ws.cell(7, spots_col_idx); c_spots_7.value = "檔次"
+        c_spots_8 = ws.cell(8, spots_col_idx)
+        ws.merge_cells(start_row=7, start_column=spots_col_idx, end_row=8, end_column=spots_col_idx)
+        c_spots_7.font = FONT_BOLD; c_spots_7.alignment = ALIGN_CENTER
+        c_spots_7.border = BORDER_ALL_THIN; c_spots_8.border = BORDER_ALL_THIN
+        set_border(c_spots_7, top=BS_MEDIUM, left=BS_MEDIUM)
+        set_border(c_spots_8, bottom=BS_MEDIUM, left=BS_MEDIUM)
 
         set_border(ws['A7'], right=BS_MEDIUM); set_border(ws['A8'], right=BS_MEDIUM)
 
@@ -383,8 +403,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                         val = r["schedule"][d_idx]; row_sum += val
                         c_s = ws.cell(curr_row, 8+d_idx); c_s.value = val; c_s.number_format = FMT_NUMBER; c_s.alignment = ALIGN_CENTER
                 
-                ws.cell(curr_row, 39, row_sum).alignment = ALIGN_CENTER
-                for c_idx in range(1, 40):
+                ws.cell(curr_row, spots_col_idx, row_sum).alignment = ALIGN_CENTER
+                for c_idx in range(1, total_cols + 1):
                     cell = ws.cell(curr_row, c_idx); cell.font = FONT_STD; cell.border = BORDER_ALL_THIN
                 curr_row += 1
 
@@ -397,13 +417,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                     while m_end + 1 < curr_row and ws.cell(m_end+1, col).value == val: m_end += 1
                     if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col, end_row=m_end, end_column=col)
                     m_start = m_end + 1
-            draw_outer_border_fast(ws, start_merge, curr_row-1, 1, 39)
+            draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
             
             for r in range(start_merge, curr_row):
                 set_border(ws.cell(r, 1), right=BS_MEDIUM)
-                set_border(ws.cell(r, 39), left=BS_MEDIUM)
+                set_border(ws.cell(r, spots_col_idx), left=BS_MEDIUM)
 
-        # --- Total Row (v110.3: Fonts) ---
+        # --- Total Row ---
         ws.row_dimensions[curr_row].height = 30
         
         c_lbl = ws.cell(curr_row, 5, "Total"); c_lbl.alignment = ALIGN_CENTER; c_lbl.font = FONT_BOLD
@@ -415,15 +435,14 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             col_idx = 8 + d_idx
             daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
             total_spots_all += daily_sum
-            # Fix: Daily sums NOT Bold (FONT_STD)
             c = ws.cell(curr_row, col_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_STD; c.number_format = FMT_NUMBER
         
-        ws.cell(curr_row, 39, total_spots_all).alignment = ALIGN_CENTER; ws.cell(curr_row, 39).font = FONT_STD # Spots total also normal
+        ws.cell(curr_row, spots_col_idx, total_spots_all).alignment = ALIGN_CENTER; ws.cell(curr_row, spots_col_idx).font = FONT_STD
         
-        for c_idx in range(1, 40):
+        for c_idx in range(1, total_cols + 1):
             set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
         set_border(ws.cell(curr_row, 1), left=BS_MEDIUM, right=BS_MEDIUM)
-        set_border(ws.cell(curr_row, 39), left=BS_MEDIUM, right=BS_MEDIUM)
+        set_border(ws.cell(curr_row, spots_col_idx), left=BS_MEDIUM, right=BS_MEDIUM)
         
         curr_row += 1
 
@@ -439,10 +458,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             set_border(c_l, left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
             set_border(c_v, right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
             if label == "Grand Total":
-                for c_idx in range(1, 40): set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM)
+                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM)
             curr_row += 1
         
-        draw_outer_border_fast(ws, 7, curr_row-1, 1, 39)
+        draw_outer_border_fast(ws, 7, curr_row-1, 1, total_cols)
         
         curr_row += 1; ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True, underline='single')
         for rm in remarks_list:
@@ -628,7 +647,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v110.3 Dongwu Final Fix)")
+        st.title("📺 媒體 Cue 表生成器 (v110.5 Dongwu Dynamic)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
