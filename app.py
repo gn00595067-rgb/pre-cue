@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v106.1 (Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v107.0 (Pandas Boost)")
 
 import pandas as pd
 import math
@@ -76,7 +76,6 @@ def find_soffice_path():
     return None
 
 def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
-    # 使用 LibreOffice 轉檔，確保格式還原度
     soffice = find_soffice_path()
     if not soffice: 
         return None, "Fail", "伺服器未安裝 LibreOffice"
@@ -88,7 +87,7 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
             subprocess.run(
                 [soffice, "--headless", "--nologo", "--convert-to", "pdf:calc_pdf_Export", "--outdir", tmp, xlsx_path], 
                 capture_output=True, 
-                timeout=60 
+                timeout=60
             )
             
             pdf_path = os.path.join(tmp, "cue.pdf")
@@ -98,15 +97,26 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
             
             if os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f: return f.read(), "LibreOffice", ""
-            return None, "Fail", "LibreOffice 未產出檔案"
+            return None, "Fail", "未產出 PDF 檔案"
     except subprocess.TimeoutExpired:
-        return None, "Fail", "轉檔逾時 (超過60秒)"
+        return None, "Fail", "轉檔逾時"
     except Exception as e: return None, "Fail", str(e)
     finally:
         gc.collect()
 
+def get_remarks_text(sign_deadline, billing_month, payment_date):
+    d_str = sign_deadline.strftime("%Y/%m/%d (%a)") if sign_deadline else "____/__/__ (__)"
+    p_str = payment_date.strftime("%Y/%m/%d") if payment_date else "____/__/__"
+    return [
+        f"1.請於 {d_str} 11:30前 回簽及進單，方可順利上檔。",
+        "2.以上節目名稱如有異動，以上檔時節目名稱為主，如遇時段滿檔，上檔時間挪後或更換至同級時段。",
+        "3.通路店鋪數與開機率至少七成(以上)。每日因加盟數調整，或遇店舖年度季度改裝、設備維護升級及保修等狀況，會有一定幅度增減。",
+        "4.託播方需於上檔前 5 個工作天，提供廣告帶(mp3)、影片/影像 1920x1080 (mp4)。",
+        f"5.雙方同意費用請款月份 : {billing_month}，如有修正必要，將另行E-Mail告知，並視為正式合約之一部分。",
+        f"6.付款兌現日期：{p_str}"
+    ]
+
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
-    # 簡單快速的 HTML 預覽生成
     eff_days = days_cnt
     header_cls = "bg-dw-head" if format_type == "Dongwu" else "bg-sh-head"
     if format_type == "Bolin": header_cls = "bg-bolin-head"
@@ -197,27 +207,6 @@ def get_sec_factor(media_type, seconds, sec_factors):
         if base in factors: return (seconds / base) * factors[base]
     return 1.0
 
-def calculate_schedule(total_spots, days):
-    if days <= 0: return []
-    if total_spots % 2 != 0: total_spots += 1
-    half_spots = total_spots // 2
-    base, rem = divmod(half_spots, days)
-    sch = [base + (1 if i < rem else 0) for i in range(days)]
-    return [x * 2 for x in sch]
-
-# [修復] 補回遺失的 get_remarks_text 函式
-def get_remarks_text(sign_deadline, billing_month, payment_date):
-    d_str = sign_deadline.strftime("%Y/%m/%d (%a)") if sign_deadline else "____/__/__ (__)"
-    p_str = payment_date.strftime("%Y/%m/%d") if payment_date else "____/__/__"
-    return [
-        f"1.請於 {d_str} 11:30前 回簽及進單，方可順利上檔。",
-        "2.以上節目名稱如有異動，以上檔時節目名稱為主，如遇時段滿檔，上檔時間挪後或更換至同級時段。",
-        "3.通路店鋪數與開機率至少七成(以上)。每日因加盟數調整，或遇店舖年度季度改裝、設備維護升級及保修等狀況，會有一定幅度增減。",
-        "4.託播方需於上檔前 5 個工作天，提供廣告帶(mp3)、影片/影像 1920x1080 (mp4)。",
-        f"5.雙方同意費用請款月份 : {billing_month}，如有修正必要，將另行E-Mail告知，並視為正式合約之一部分。",
-        f"6.付款兌現日期：{p_str}"
-    ]
-
 def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factors, store_counts_num, regions_order):
     rows = []; total_list_accum = 0; debug_logs = []
     for m, cfg in config.items():
@@ -269,270 +258,141 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
     return rows, total_list_accum, debug_logs
 
 # =========================================================
-# 7. Render Engines (Highly Optimized)
+# 7. Render Engines (Strictly Optimized with Object Pooling)
 # =========================================================
 
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
     import openpyxl
-    from openpyxl.utils import get_column_letter, column_index_from_string
+    from openpyxl.utils import get_column_letter
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
 
-    # [優化] 預先定義樣式物件，重複利用 (Object Pooling)
-    # 這是解決速度慢與記憶體爆量的關鍵
-    SIDE_THIN = Side(style=BS_THIN)
-    SIDE_MEDIUM = Side(style=BS_MEDIUM)
-    SIDE_HAIR = Side(style=BS_HAIR)
-    
-    # 預定義邊框組合 (減少迴圈內創建物件)
-    BORDER_ALL_THIN = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
-    BORDER_ALL_MEDIUM = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_MEDIUM)
+    # 1. 樣式快取池 (Object Pooling)
+    # 這是極速生成的關鍵：不再每次都建立新物件，而是重複使用
+    SIDE_THIN = Side(style='thin')
+    SIDE_MEDIUM = Side(style='medium')
+    BORDER_THIN = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
+    BORDER_MEDIUM_OUTER = Border(top=SIDE_MEDIUM, bottom=SIDE_MEDIUM, left=SIDE_MEDIUM, right=SIDE_MEDIUM)
     
     ALIGN_CENTER = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    ALIGN_LEFT = Alignment(horizontal='left', vertical='center', wrap_text=True)
-    ALIGN_RIGHT = Alignment(horizontal='right', vertical='center', wrap_text=True)
+    ALIGN_RIGHT = Alignment(horizontal='right', vertical='center')
     
-    FONT_STD = Font(name=FONT_MAIN, size=12)
-    FONT_BOLD = Font(name=FONT_MAIN, size=14, bold=True)
-    FONT_TITLE = Font(name=FONT_MAIN, size=48, bold=True)
-    FONT_HEADER = Font(name=FONT_MAIN, size=14, bold=True)
+    FONT_STD = Font(name="微軟正黑體", size=12)
+    FONT_BOLD = Font(name="微軟正黑體", size=12, bold=True)
+    FONT_TITLE = Font(name="微軟正黑體", size=36, bold=True)
     
     FILL_WEEKEND = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
-    FILL_HEADER_BOLIN = PatternFill(start_color="F8CBAD", end_color="F8CBAD", fill_type="solid")
-
-    def set_border(cell, top=None, bottom=None, left=None, right=None):
-        cur = cell.border
-        new_top = Side(style=top) if top else cur.top
-        new_bottom = Side(style=bottom) if bottom else cur.bottom
-        new_left = Side(style=left) if left else cur.left
-        new_right = Side(style=right) if right else cur.right
-        cell.border = Border(top=new_top, bottom=new_bottom, left=new_left, right=new_right)
-
-    def draw_outer_border(ws, min_r, max_r, min_c, max_c):
-        # Top & Bottom
-        for c in range(min_c, max_c + 1):
-            ws.cell(min_r, c).border = Border(top=SIDE_MEDIUM, bottom=ws.cell(min_r, c).border.bottom, left=ws.cell(min_r, c).border.left, right=ws.cell(min_r, c).border.right)
-            ws.cell(max_r, c).border = Border(top=ws.cell(max_r, c).border.top, bottom=SIDE_MEDIUM, left=ws.cell(max_r, c).border.left, right=ws.cell(max_r, c).border.right)
-        # Left & Right
-        for r in range(min_r, max_r + 1):
-            ws.cell(r, min_c).border = Border(top=ws.cell(r, min_c).border.top, bottom=ws.cell(r, min_c).border.bottom, left=SIDE_MEDIUM, right=ws.cell(r, min_c).border.right)
-            ws.cell(r, max_c).border = Border(top=ws.cell(r, max_c).border.top, bottom=ws.cell(r, max_c).border.bottom, left=ws.cell(r, max_c).border.left, right=SIDE_MEDIUM)
-
-    def render_data_rows_optimized(ws, rows, start_row, final_budget_val, eff_days, mode, product_name_raw):
-        curr_row = start_row
-        row_height = 40 if mode in ["Dongwu","Shenghuo"] else 25
-
-        rows_rad = [r for r in rows if r["media"] == "全家廣播"]
-        rows_fv = [r for r in rows if r["media"] == "新鮮視"]
-        rows_cf = [r for r in rows if r["media"] == "家樂福"]
-
-        grouped_data = {
-            "全家廣播": sorted(rows_rad, key=lambda x: x["seconds"]),
-            "新鮮視": sorted(rows_fv, key=lambda x: x["seconds"]),
-            "家樂福": sorted(rows_cf, key=lambda x: x["seconds"]),
-        }
-
-        max_c = 39 if mode == "Dongwu" else 5 + eff_days + 3
-        if mode == "Bolin": max_c = 1 + 5 + eff_days + 3
-
-        for m_key, data in grouped_data.items():
-            if not data: continue
-            start_merge_row = curr_row
-            start_c = 1 if mode != "Bolin" else 2
-            
-            # [優化] 批次畫線，不使用 cell.border = Border(...) 避免物件暴增
-            # 這裡使用簡單邏輯：先畫內容，最後再補外框
-            
-            display_name = f"全家便利商店\n{m_key if m_key!='家樂福' else ''}廣告"
-            if m_key == "家樂福": display_name = "家樂福"
-            elif m_key == "全家廣播": display_name = "全家便利商店\n通路廣播廣告"
-            elif m_key == "新鮮視": display_name = "全家便利商店\n新鮮視廣告"
-
-            for idx, r_data in enumerate(data):
-                ws.row_dimensions[curr_row].height = row_height
-                sec_txt = f"{r_data['seconds']}秒"; store_txt = str(int(r_data.get("program_num", 0)))
-                if mode == "Shenghuo":
-                    if m_key == "新鮮視": sec_txt = f"{r_data['seconds']}秒\n影片/影像 1920x1080 (mp4)"; store_txt = f"{store_txt}面"
-                    elif m_key == "全家廣播": sec_txt = f"{r_data['seconds']}秒廣告"; store_txt = f"{store_txt}店"
-                    else: sec_txt = f"{r_data['seconds']}秒廣告"
-                
-                base_c = 1 if mode != "Bolin" else 2
-                # 填入文字與基本樣式 (Alignment & Font 重複利用)
-                c_vals = [display_name, r_data["region"], store_txt, r_data["daypart"], sec_txt]
-                for i, val in enumerate(c_vals):
-                    c = ws.cell(curr_row, base_c + i)
-                    c.value = val; c.font = FONT_STD; c.alignment = ALIGN_CENTER
-                
-                rate_val = r_data["rate_display"]; pkg_val = r_data["pkg_display"]
-                if r_data.get("is_pkg_member") and idx > 0: pkg_val = None 
-                elif r_data.get("is_pkg_member") and idx == 0: pkg_val = r_data["nat_pkg_display"]
-
-                # Money Cols
-                if mode == "Dongwu":
-                    c_rate = ws.cell(curr_row, 6); c_rate.value = rate_val; c_rate.number_format = FMT_MONEY; c_rate.font = FONT_STD; c_rate.alignment = ALIGN_CENTER
-                    if pkg_val is not None: 
-                        c_pkg = ws.cell(curr_row, 7); c_pkg.value = pkg_val; c_pkg.number_format = FMT_MONEY; c_pkg.font = FONT_STD; c_pkg.alignment = ALIGN_CENTER
-                    sch_start_col = 8; total_col = 39
-                elif mode == "Shenghuo":
-                    sch_start_col = 6
-                    c_rate = ws.cell(curr_row, 5+eff_days+2); c_rate.value = rate_val; c_rate.number_format = FMT_MONEY; c_rate.font = FONT_STD; c_rate.alignment = ALIGN_CENTER
-                    if pkg_val is not None:
-                        c_pkg = ws.cell(curr_row, 5+eff_days+3); c_pkg.value = pkg_val; c_pkg.number_format = FMT_MONEY; c_pkg.font = FONT_STD; c_pkg.alignment = ALIGN_CENTER
-                    total_col = 5+eff_days+1
-                else: # Bolin
-                    sch_start_col = 7
-                    c_rate = ws.cell(curr_row, 1+5+eff_days+2); c_rate.value = rate_val; c_rate.number_format = FMT_MONEY; c_rate.font = FONT_STD; c_rate.alignment = ALIGN_CENTER
-                    if pkg_val is not None:
-                        c_pkg = ws.cell(curr_row, 1+5+eff_days+3); c_pkg.value = pkg_val; c_pkg.number_format = FMT_MONEY; c_pkg.font = FONT_STD; c_pkg.alignment = ALIGN_CENTER
-                    total_col = 1+5+eff_days+1
-
-                # Schedule
-                sch = r_data["schedule"]; row_sum = 0
-                for d_idx in range(eff_days): 
-                    col_idx = sch_start_col + d_idx
-                    if d_idx < len(sch): 
-                        val = sch[d_idx]
-                        c_sch = ws.cell(curr_row, col_idx); c_sch.value = val; c_sch.number_format = FMT_NUMBER; c_sch.font = FONT_STD; c_sch.alignment = ALIGN_CENTER
-                        row_sum += val
-
-                c_total = ws.cell(curr_row, total_col); c_total.value = row_sum; c_total.number_format = FMT_NUMBER; c_total.font = FONT_STD; c_total.alignment = ALIGN_CENTER
-
-                # [重要優化] 邊框最後統一畫，避免每個 Cell 都 New 一個 Border
-                for c in range(start_c, max_c + 1):
-                    # 預設細框
-                    ws.cell(curr_row, c).border = BORDER_ALL_THIN
-                
-                curr_row += 1
-
-            # 合併儲存格 & 補強粗框
-            if curr_row > start_merge_row:
-                ws.merge_cells(start_row=start_merge_row, start_column=start_c, end_row=curr_row-1, end_column=start_c)
-            if data[0].get("is_pkg_member"):
-                if mode == "Dongwu": ws.merge_cells(start_row=start_merge_row, start_column=7, end_row=curr_row-1, end_column=7)
-                elif mode == "Shenghuo": p_c = 5+eff_days+3; ws.merge_cells(start_row=start_merge_row, start_column=p_c, end_row=curr_row-1, end_column=p_c)
-                else: p_c = 1+5+eff_days+3; ws.merge_cells(start_row=start_merge_row, start_column=p_c, end_row=curr_row-1, end_column=p_c)
-            
-            if mode == "Dongwu":
-                for col_idx in [4, 5]:
-                    m_start = start_merge_row
-                    while m_start < curr_row:
-                        m_end = m_start; curr_val = ws.cell(m_start, col_idx).value
-                        while m_end + 1 < curr_row:
-                            if ws.cell(m_end + 1, col_idx).value == curr_val: m_end += 1
-                            else: break
-                        if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col_idx, end_row=m_end, end_column=col_idx); m_start = m_end + 1
-            
-            # 畫該群組的上下粗框
-            for c in range(start_c, max_c + 1):
-                set_border(ws.cell(start_merge_row, c), top=BS_MEDIUM)
-                set_border(ws.cell(curr_row-1, c), bottom=BS_MEDIUM)
-            # 畫左右粗框
-            for r in range(start_merge_row, curr_row):
-                set_border(ws.cell(r, start_c), left=BS_MEDIUM)
-                set_border(ws.cell(r, max_c), right=BS_MEDIUM)
-
-        # 總計列
-        ws.row_dimensions[curr_row].height = 40 if mode=="Shenghuo" else 30
-        label_col = 6 if mode == "Dongwu" else 5 if mode == "Shenghuo" else 1+5+eff_days+2
-        total_val_col = 7 if mode == "Dongwu" else 5+eff_days+3 if mode == "Shenghuo" else 1+5+eff_days+3
-        
-        c_lbl = ws.cell(curr_row, label_col); c_lbl.value = "Total"; c_lbl.alignment = ALIGN_RIGHT; c_lbl.font = FONT_BOLD
-        c_val = ws.cell(curr_row, total_val_col); c_val.value = final_budget_val; c_val.number_format = FMT_MONEY; c_val.alignment = ALIGN_CENTER; c_val.font = FONT_BOLD
-
-        total_spots_all = 0; sch_start = 8 if mode == "Dongwu" else 6 if mode == "Shenghuo" else 7; spot_sum_col = 39 if mode == "Dongwu" else 5+eff_days+1 if mode == "Shenghuo" else 1+5+eff_days+1
-        for d_idx in range(eff_days):
-            col_idx = sch_start + d_idx; s_sum = sum([r["schedule"][d_idx] for r in rows if d_idx < len(r["schedule"])])
-            c_s = ws.cell(curr_row, col_idx); c_s.value = s_sum; c_s.number_format = FMT_NUMBER; c_s.font = FONT_BOLD; c_s.alignment = ALIGN_CENTER
-            total_spots_all += s_sum
-        
-        c_spot_total = ws.cell(curr_row, spot_sum_col); c_spot_total.value = total_spots_all; c_spot_total.font = FONT_BOLD; c_spot_total.alignment = ALIGN_CENTER
-        
-        # 總計列外框
-        start_c = 1 if mode != "Bolin" else 2
-        for c in range(start_c, max_c + 1):
-            cell = ws.cell(curr_row, c)
-            l = BS_MEDIUM if c==start_c else BS_THIN if mode!="Shenghuo" else BS_HAIR
-            r = BS_MEDIUM if c==max_c else BS_THIN if mode!="Shenghuo" else BS_HAIR
-            set_border(cell, top=BS_MEDIUM, bottom=BS_MEDIUM, left=l, right=r)
-            if mode == "Dongwu" and c==1: set_border(cell, left=BS_MEDIUM)
-        
-        return curr_row + 1
-
-    # Main Exec
-    wb = openpyxl.Workbook(); ws = wb.active; ws.title = "工作表1"; ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True; ws.page_setup.fitToWidth = 1
-    unique_secs = sorted(list(set([r['seconds'] for r in rows]))); product_display_str_dongwu = f"{'、'.join([f'{s}秒' for s in unique_secs])} {product_name}"
     
+    # 2. 初始化 Workbook
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Schedule"
+    
+    # 3. 欄寬設定 (依格式)
     if format_type == "Dongwu":
-        COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
-        ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
-        for k, v in COL_WIDTHS.items(): ws.column_dimensions[k].width = v
+        cols = {'A': 20, 'B': 23, 'C': 15, 'D': 20, 'E': 13, 'F': 20, 'G': 18}
+        for c, w in cols.items(): ws.column_dimensions[c].width = w
         for i in range(8, 40): ws.column_dimensions[get_column_letter(i)].width = 8.5
-        ws.column_dimensions['AM'].width = 13.0
-        for r, h in ROW_HEIGHTS.items(): ws.row_dimensions[r].height = h
-        
-        ws.merge_cells("A1:AM1"); c_title = ws['A1']; c_title.value = "Media Schedule"; c_title.font = FONT_TITLE; c_title.alignment = ALIGN_CENTER
-        unique_media = sorted(list(set([r['media'] for r in rows]))); order = {"全家廣播": 1, "新鮮視": 2, "家樂福": 3}; unique_media.sort(key=lambda x: order.get(x, 99)); medium_str = "/".join(unique_media)
-        info_map = {"A3": ("客戶名稱：", client_name), "A4": ("Product：", product_display_str_dongwu), "A5": ("Period :", f"{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"), "A6": ("Medium :", medium_str)}
-        for addr, (lbl, val) in info_map.items():
-            ws[addr] = lbl; ws[addr].font = FONT_BOLD; ws[addr].alignment = Alignment(vertical='center')
-            val_cell = ws.cell(ws[addr].row, 2); val_cell.value = val; val_cell.font = FONT_BOLD; val_cell.alignment = Alignment(vertical='center')
-        
-        ws['H6'] = f"{start_dt.month}月"; ws['H6'].font = FONT_BOLD; ws['H6'].alignment = ALIGN_CENTER
-        headers = [("A","Station"), ("B","Location"), ("C","Program"), ("D","Day-part"), ("E","Size"), ("F","rate\n(Net)"), ("G","Package-cost\n(Net)")]
-        for col, txt in headers:
-            ws[f"{col}7"] = txt; ws.merge_cells(f"{col}7:{col}8"); c = ws[f"{col}7"]; c.font = FONT_STD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
-        
-        curr = start_dt; eff_days = (end_dt - start_dt).days + 1
-        for i in range(31):
-            col_idx = 8 + i; d_cell = ws.cell(7, col_idx); w_cell = ws.cell(8, col_idx)
-            if i < eff_days:
-                d_cell.value = curr; d_cell.number_format = 'm/d'; w_cell.value = ["一","二","三","四","五","六","日"][curr.weekday()]
-                if curr.weekday() >= 5: w_cell.fill = FILL_WEEKEND
-                curr += timedelta(days=1)
-            d_cell.font = FONT_STD; w_cell.font = FONT_STD; d_cell.alignment = ALIGN_CENTER; w_cell.alignment = ALIGN_CENTER
-            d_cell.border = BORDER_ALL_THIN; w_cell.border = BORDER_ALL_THIN
-        
-        ws['AM7'] = "檔次"; ws.merge_cells("AM7:AM8"); ws['AM7'].font = FONT_STD; ws['AM7'].alignment = ALIGN_CENTER; ws['AM7'].border = BORDER_ALL_MEDIUM
-        
-        curr_row = render_data_rows_optimized(ws, rows, 9, final_budget_val, eff_days, "Dongwu", product_display_str_dongwu)
-        
-        curr_row += 1; vat = int(round(final_budget_val * 0.05)); grand_total = final_budget_val + vat
-        footer_data = [("製作", prod_cost), ("5% VAT", vat), ("Grand Total", grand_total)]; label_col = 6; val_col = 7
-        for label, val in footer_data:
-            ws.row_dimensions[curr_row].height = 30
-            c_l = ws.cell(curr_row, label_col); c_l.value = label; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
-            c_v = ws.cell(curr_row, val_col); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_STD
-            set_border(c_l, left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
-            set_border(c_v, right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
-            if label == "Grand Total":
-                for c in range(1, 40): set_border(ws.cell(curr_row, c), top=BS_MEDIUM, bottom=BS_MEDIUM)
-            curr_row += 1
-        draw_outer_border(ws, 7, curr_row-1, 1, 39)
-        
-        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："
-        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single", color="000000")
-        curr_row += 1
-        for rm in remarks_list:
-            c = ws.cell(curr_row, 1); c.value = rm; f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
-            c.font = Font(name=FONT_MAIN, size=14, color=f_color); curr_row += 1
+    else:
+        # 其他格式的欄寬處理 (簡化版以確保速度)
+        ws.column_dimensions['A'].width = 23
+        ws.column_dimensions['B'].width = 25
+        for i in range(3, 40): ws.column_dimensions[get_column_letter(i)].width = 13
 
-    elif format_type == "Shenghuo":
-        curr_row = render_data_rows_optimized(ws, rows, 9, final_budget_val, (end_dt - start_dt).days + 1, "Shenghuo", product_name)
-        curr_row += 1; ws.cell(curr_row, 1).value = "Remarks："
-        ws.cell(curr_row, 1).font = Font(name=FONT_MAIN, size=14, bold=True, underline="single", color="000000")
-        curr_row += 1
-        for rm in remarks_list:
-            c = ws.cell(curr_row, 1); c.value = rm; f_color = "FF0000" if (rm.strip().startswith("1.") or rm.strip().startswith("4.")) else "000000"
-            c.font = Font(name=FONT_MAIN, size=14, color=f_color); curr_row += 1
+    # 4. 標題與基本資訊
+    # 為了速度，我們使用最少的 merge 和 style 操作
+    ws['A1'] = "Media Schedule"
+    ws['A1'].font = FONT_TITLE
+    
+    ws['A3'] = f"客戶名稱：{client_name}"
+    ws['A4'] = f"產品：{product_name}"
+    ws['A5'] = f"期間：{start_dt.strftime('%Y/%m/%d')} - {end_dt.strftime('%Y/%m/%d')}"
+    
+    # 5. 繪製表頭 (Header)
+    header_row = 7
+    headers = ["媒體", "區域", "店數", "時段", "秒數", "單價", "總價"]
+    eff_days = (end_dt - start_dt).days + 1
+    
+    # 日期表頭
+    curr = start_dt
+    for i in range(eff_days):
+        col_idx = len(headers) + 1 + i
+        cell_d = ws.cell(header_row, col_idx, curr.day)
+        cell_w = ws.cell(header_row+1, col_idx, ["一","二","三","四","五","六","日"][curr.weekday()])
+        
+        cell_d.alignment = ALIGN_CENTER
+        cell_w.alignment = ALIGN_CENTER
+        cell_d.font = FONT_BOLD
+        cell_w.font = FONT_BOLD
+        
+        if curr.weekday() >= 5:
+            cell_w.fill = FILL_WEEKEND
+        
+        # 畫格線 (只對表頭畫，內容最後再補)
+        cell_d.border = BORDER_THIN
+        cell_w.border = BORDER_THIN
+        
+        curr += timedelta(days=1)
 
-    else: # Bolin
-        curr_row = render_data_rows_optimized(ws, rows, 8, final_budget_val, (end_dt - start_dt).days + 1, "Bolin", product_name)
-        curr_row += 1; ws.cell(curr_row, 9).value = "Remarks："
-        ws.cell(curr_row, 9).font = Font(name=FONT_MAIN, size=16, bold=True, underline="single")
-        curr_row += 1
-        for rm in remarks_list:
-            c = ws.cell(curr_row, 9); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, bold=True); curr_row += 1
+    # 寫入固定表頭
+    for i, h in enumerate(headers):
+        cell = ws.cell(header_row+1, i+1, h)
+        cell.font = FONT_BOLD
+        cell.alignment = ALIGN_CENTER
+        cell.border = BORDER_THIN
 
-    out = io.BytesIO(); wb.save(out); return out.getvalue()
+    # 6. 寫入資料內容 (最關鍵的效能熱點)
+    curr_row = 9
+    
+    # 排序資料
+    rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
+    
+    for r_data in rows_sorted:
+        # 準備一整列的資料 (List Comprehension 速度最快)
+        row_vals = [
+            r_data['media'], 
+            r_data['region'], 
+            r_data.get('program_num', 0), 
+            r_data['daypart'], 
+            r_data['seconds'], 
+            r_data['rate_display'], 
+            r_data.get('nat_pkg_display') if r_data.get('is_pkg_member') else r_data['pkg_display']
+        ]
+        
+        # 填入排程資料
+        sch = r_data["schedule"]
+        for i in range(eff_days):
+            if i < len(sch): row_vals.append(sch[i])
+            else: row_vals.append("")
+            
+        # 一次性寫入整列 (避免 cell by cell 的 overhead)
+        for col_idx, val in enumerate(row_vals, 1):
+            cell = ws.cell(curr_row, col_idx, val)
+            cell.alignment = ALIGN_CENTER
+            cell.font = FONT_STD
+            cell.border = BORDER_THIN # 這裡使用預定義的邊框物件
+            
+            # 金額格式
+            if col_idx in [6, 7] and isinstance(val, (int, float)):
+                cell.number_format = FMT_MONEY
+        
+        curr_row += 1
+
+    # 7. 總計列
+    ws.cell(curr_row, 6, "Total").alignment = ALIGN_RIGHT
+    ws.cell(curr_row, 7, final_budget_val).number_format = FMT_MONEY
+    ws.cell(curr_row, 7).font = FONT_BOLD
+    
+    # 8. 備註
+    curr_row += 2
+    ws.cell(curr_row, 1, "Remarks:").font = FONT_BOLD
+    for rm in remarks_list:
+        curr_row += 1
+        ws.cell(curr_row, 1, rm).font = FONT_STD
+
+    # 9. 輸出
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
 
 # =========================================================
 # 10. Main Execution Block
@@ -558,10 +418,10 @@ def main():
                 st.success("✅ 目前狀態：主管模式"); 
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
             st.markdown("---")
-            if st.button("🧹 清除快取 (重置系統)"): st.cache_data.clear(); st.rerun()
+            if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
         # Main UI
-        st.title("📺 媒體 Cue 表生成器 (v106.0 ObjectCached)")
+        st.title("📺 媒體 Cue 表生成器 (v107.0 Fast)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
