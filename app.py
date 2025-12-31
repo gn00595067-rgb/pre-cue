@@ -6,15 +6,20 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v103.0 (Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v104.0 (Native)")
 
 import pandas as pd
 import math
 import io
 import os
 import shutil
+import tempfile
+import subprocess
 import re
+import requests
+import base64
 from datetime import timedelta, datetime, date
+from copy import copy
 import openpyxl
 from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
@@ -34,10 +39,12 @@ if "cb_cf" not in st.session_state: st.session_state.cb_cf = False
 # 3. 全域常數
 # =========================================================
 GSHEET_SHARE_URL = "https://docs.google.com/spreadsheets/d/1bzmG-N8XFsj8m3LUPqA8K70AcIqaK4Qhq1VPWcK0w_s/edit?usp=sharing"
-# [關鍵修正] 移除特定中文字型，改用通用字型，避免 Linux 搜尋字型卡死
-FONT_MAIN = None 
-BS_THIN = 'thin'; BS_MEDIUM = 'medium'; BS_HAIR = 'hair'
-FMT_MONEY = '"$"#,##0_);[Red]("$"#,##0)'; FMT_NUMBER = '#,##0'
+FONT_MAIN = "微軟正黑體" # 嘗試保留設定，若無則系統自動替換
+BS_THIN = 'thin'
+BS_MEDIUM = 'medium'
+BS_HAIR = 'hair'
+FMT_MONEY = '"$"#,##0_);[Red]("$"#,##0)'
+FMT_NUMBER = '#,##0'
 REGIONS_ORDER = ["北區", "桃竹苗", "中區", "雲嘉南", "高屏", "東區"]
 DURATIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 REGION_DISPLAY_MAP = {"北區": "北區-北北基", "桃竹苗": "桃區-桃竹苗", "中區": "中區-中彰投", "雲嘉南": "雲嘉南區-雲嘉南", "高屏": "高屏區-高屏", "東區": "東區-宜花東", "全省量販": "全省量販", "全省超市": "全省超市"}
@@ -63,33 +70,68 @@ def html_escape(s):
 def region_display(region):
     return REGION_DISPLAY_MAP.get(region, region)
 
-def html_to_pdf_weasyprint(html_str):
+def find_soffice_path():
+    # 尋找 LibreOffice 執行檔
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if soffice: return soffice
+    if os.name == "nt":
+        candidates = [
+            r"C:\Program Files\LibreOffice\program\soffice.exe",
+            r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+        ]
+        for p in candidates:
+            if os.path.exists(p): return p
+    return None
+
+def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
+    # 使用 LibreOffice 轉檔，確保格式還原度
+    soffice = find_soffice_path()
+    if not soffice: 
+        return None, "Fail", "伺服器未安裝 LibreOffice，無法生成原生 PDF"
     try:
-        from weasyprint import HTML, CSS
-        from weasyprint.text.fonts import FontConfiguration
-        font_config = FontConfiguration()
-        # [關鍵修正] CSS 移除 Microsoft JhengHei，避免伺服器端卡死
-        css = CSS(string="@page { size: A4 landscape; margin: 1cm; } body { font-family: sans-serif; }")
-        pdf_bytes = HTML(string=html_str).write_pdf(stylesheets=[css], font_config=font_config)
-        return pdf_bytes, ""
-    except ImportError:
-        return None, "未安裝 weasyprint"
-    except Exception as e: 
-        return None, str(e)
+        with tempfile.TemporaryDirectory() as tmp:
+            xlsx_path = os.path.join(tmp, "cue.xlsx")
+            with open(xlsx_path, "wb") as f: f.write(xlsx_bytes)
+            
+            # 執行轉檔，設定 timeout 避免永久卡死
+            subprocess.run(
+                [soffice, "--headless", "--nologo", "--convert-to", "pdf:calc_pdf_Export", "--outdir", tmp, xlsx_path], 
+                capture_output=True, 
+                timeout=45 # 給予足夠時間
+            )
+            
+            pdf_path = os.path.join(tmp, "cue.pdf")
+            if not os.path.exists(pdf_path):
+                # 有時候檔名會變，搜尋一下
+                for fn in os.listdir(tmp):
+                    if fn.endswith(".pdf"): pdf_path = os.path.join(tmp, fn); break
+            
+            if os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f: return f.read(), "LibreOffice", ""
+            return None, "Fail", "LibreOffice 執行後未產出檔案"
+    except subprocess.TimeoutExpired:
+        return None, "Fail", "轉檔逾時 (超過45秒)"
+    except Exception as e: return None, "Fail", str(e)
 
 # =========================================================
-# 5. OpenPyXL Helpers
+# 5. OpenPyXL Helpers (優化版)
 # =========================================================
 def set_border(cell, top=None, bottom=None, left=None, right=None):
+    # 優化：減少屬性存取次數
     cur = cell.border
-    t = top if top is not None else (cur.top.style if cur.top else None)
-    b = bottom if bottom is not None else (cur.bottom.style if cur.bottom else None)
-    l = left if left is not None else (cur.left.style if cur.left else None)
-    r = right if right is not None else (cur.right.style if cur.right else None)
-    cell.border = Border(top=Side(style=t) if t else Side(), bottom=Side(style=b) if b else Side(), left=Side(style=l) if l else Side(), right=Side(style=r) if r else Side())
+    new_top = Side(style=top) if top else cur.top
+    new_bottom = Side(style=bottom) if bottom else cur.bottom
+    new_left = Side(style=left) if left else cur.left
+    new_right = Side(style=right) if right else cur.right
+    cell.border = Border(top=new_top, bottom=new_bottom, left=new_left, right=new_right)
 
-def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment=None):
-    rows = list(ws[cell_range])
+def style_range(ws, cell_range, border=None, fill=None, font=None, alignment=None):
+    # 優化：針對整個範圍套用樣式
+    # 這是 Excel 生成緩慢的主因之一，儘量減少不必要的迴圈
+    rows = ws[cell_range]
+    # 如果是單一儲存格，ws[range] 會回傳 tuple of tuple，或直接 cell
+    if not isinstance(rows, tuple): rows = ((rows,),)
+    
     for row in rows:
         for cell in row:
             if border: cell.border = border
@@ -98,10 +140,21 @@ def style_range(ws, cell_range, border=Border(), fill=None, font=None, alignment
             if alignment: cell.alignment = alignment
 
 def draw_outer_border(ws, min_r, max_r, min_c, max_c):
+    # 畫外框優化
+    top_side = Side(style=BS_MEDIUM)
+    bottom_side = Side(style=BS_MEDIUM)
+    left_side = Side(style=BS_MEDIUM)
+    right_side = Side(style=BS_MEDIUM)
+
+    # Top & Bottom
+    for c in range(min_c, max_c + 1):
+        ws.cell(min_r, c).border = Border(top=top_side, bottom=ws.cell(min_r, c).border.bottom, left=ws.cell(min_r, c).border.left, right=ws.cell(min_r, c).border.right)
+        ws.cell(max_r, c).border = Border(top=ws.cell(max_r, c).border.top, bottom=bottom_side, left=ws.cell(max_r, c).border.left, right=ws.cell(max_r, c).border.right)
+    
+    # Left & Right
     for r in range(min_r, max_r + 1):
-        for c in range(min_c, max_c + 1):
-            cell = ws.cell(r, c)
-            set_border(cell, top=BS_MEDIUM if r == min_r else None, bottom=BS_MEDIUM if r == max_r else None, left=BS_MEDIUM if c == min_c else None, right=BS_MEDIUM if c == max_c else None)
+        ws.cell(r, min_c).border = Border(top=ws.cell(r, min_c).border.top, bottom=ws.cell(r, min_c).border.bottom, left=left_side, right=ws.cell(r, min_c).border.right)
+        ws.cell(r, max_c).border = Border(top=ws.cell(r, max_c).border.top, bottom=ws.cell(r, max_c).border.bottom, left=ws.cell(r, max_c).border.left, right=right_side)
 
 # =========================================================
 # 6. 業務邏輯與計算
@@ -592,7 +645,7 @@ def main():
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
         # Main UI
-        st.title("📺 媒體 Cue 表生成器 (v103.0 修復版)")
+        st.title("📺 媒體 Cue 表生成器 (v104.0 Native)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
@@ -726,47 +779,45 @@ def main():
             
             st.components.v1.html(html_preview, height=700, scrolling=True)
             
+            # Debug Logs (With Timer Slots)
+            st.session_state['debug_logs'] = logs # Store for persistent debug
+            with st.expander("💡 系統運算與效能監控", expanded=False):
+                if 'timing_log' in st.session_state:
+                    st.markdown("### ⏱️ 效能計時 (最近一次)")
+                    for t in st.session_state['timing_log']: st.text(t)
+                st.divider()
+                for log in logs:
+                    st.markdown(f"**{log['Media']}**: {log['Status']} (Budget: {log['Budget']})")
+
             st.markdown("---")
             st.subheader("📥 檔案下載區")
             st.info("💡 為了避免畫面卡頓，請確認上方設定無誤後，點擊下方按鈕以生成檔案。")
 
-            # -----------------------------------------------------------
-            # 診斷控制項
-            # -----------------------------------------------------------
-            # 預設不產生 PDF，先求 Excel 順暢
-            run_pdf = st.checkbox("同時生成 PDF (若卡頓請取消此勾選)", value=False)
-
             if st.button("🚀 生成/更新 下載檔案"):
-                progress_ph = st.empty() # 用於即時顯示進度
+                st.session_state['timing_log'] = [] # Reset Log
+                progress_ph = st.empty() # Placeholder for real-time log
 
+                # Use specific status to avoid "spinner" freeze perception
+                progress_ph.info("⏳ 步驟 1/2: 正在繪製 Excel 表格...")
+                
                 try:
                     t0 = time.time()
                     
                     # Step 1: Excel Generation
-                    progress_ph.success("✅ 步驟 1/2: 正在繪製 Excel 表格... (開始)")
                     xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
                     t1 = time.time()
-                    progress_ph.success(f"✅ 步驟 1/2: Excel 生成完成！ (耗時 {t1-t0:.2f}秒)")
+                    excel_time = t1 - t0
+                    st.session_state['timing_log'].append(f"Excel 生成: {excel_time:.2f}秒")
                     
-                    # Step 2: PDF Generation (Optional)
-                    pdf_bytes = None
-                    method = "Skipped"
+                    progress_ph.info("⏳ 步驟 2/2: 正在呼叫 LibreOffice 轉檔 PDF (需時約 15-30 秒)...")
                     
-                    if run_pdf:
-                        progress_ph.info("🔄 步驟 2/2: 正在進行 PDF 轉檔 (Web Engine)...")
-                        t2_start = time.time()
-                        method = "Web Engine"
-                        # 嘗試用快速的網頁轉檔
-                        pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
-                        
-                        if not pdf_bytes:
-                            st.warning(f"Web 引擎轉檔失敗 ({err})，請使用 Excel 下載功能。")
-                            method = "Failed"
-                        
-                        t2_end = time.time()
-                        progress_ph.success(f"✅ 步驟 2/2: PDF 生成完成！ (耗時 {t2_end-t2_start:.2f}秒)")
-                    else:
-                        progress_ph.info("⏭️ 步驟 2/2: 已跳過 PDF 生成")
+                    # Step 2: PDF Generation (LibreOffice)
+                    t2_start = time.time()
+                    pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
+                    t2_end = time.time()
+                    pdf_time = t2_end - t2_start
+                    
+                    st.session_state['timing_log'].append(f"PDF 生成 ({method}): {pdf_time:.2f}秒")
 
                     # 3. Store Results
                     st.session_state['generated_xlsx'] = xlsx_temp
@@ -774,10 +825,16 @@ def main():
                     st.session_state['pdf_method'] = method
                     st.session_state['gen_time'] = datetime.now().strftime("%H:%M:%S")
                     
-                    st.balloons()
+                    total_time = time.time() - t0
                     
+                    if pdf_bytes:
+                        progress_ph.success(f"✅ 運算完成！(總耗時: {total_time:.2f}秒)")
+                        st.balloons()
+                    else:
+                        progress_ph.error(f"❌ PDF 生成失敗 ({err})，但 Excel 已備妥。")
+                        
                 except Exception as e:
-                    st.error(f"生成過程發生錯誤: {e}")
+                    progress_ph.error(f"生成過程發生錯誤: {e}")
                     st.error(traceback.format_exc())
 
             # 下載按鈕顯示區
@@ -788,13 +845,13 @@ def main():
                 with col_dl2:
                     if st.session_state.get('generated_pdf'):
                         st.download_button(
-                            f"📥 下載 PDF", 
+                            f"📥 下載 PDF (LibreOffice)", 
                             st.session_state['generated_pdf'], 
                             f"Cue_{safe_filename(client_name)}.pdf", 
                             key="pdf_dl_btn",
                             mime="application/pdf"
                         )
-                    elif run_pdf:
+                    else:
                         st.warning("⚠️ 無法生成 PDF，請下載 Excel")
 
                 with col_dl1:
