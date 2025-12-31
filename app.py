@@ -5,7 +5,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定 (必須是程式的第一個有效指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v102.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v102.0 (Optimized)")
 
 import pandas as pd
 import math
@@ -643,7 +643,7 @@ def main():
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
         # Main UI
-        st.title("📺 媒體 Cue 表生成器 (v102.0)")
+        st.title("📺 媒體 Cue 表生成器 (v102.0 Optimized)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
@@ -775,8 +775,13 @@ def main():
             p_str = f"{'、'.join([f'{s}秒' for s in sorted(list(set(r['seconds'] for r in rows)))])} {product_name}"
             rem = get_remarks_text(sign_deadline, billing_month, payment_date)
             html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
+            
+            # ------------------------------------------------------------------
+            # 優化: 預覽與下載分離，提升互動效能
+            # ------------------------------------------------------------------
             st.components.v1.html(html_preview, height=700, scrolling=True)
             
+            # Debug Panel (預設收合)
             with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
                 for log in logs:
                     st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
@@ -784,24 +789,63 @@ def main():
                         for detail in log['Details']: st.info(detail)
                     st.divider()
             
-            col_dl1, col_dl2 = st.columns(2)
-            with col_dl2:
-                try:
-                    xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
-                    pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
-                    if pdf_bytes: st.download_button(f"📥 下載 PDF ({method})", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl")
-                    else: 
-                        pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
-                        if pdf_bytes: st.download_button("📥 下載 PDF (Web)", pdf_bytes, f"Cue_{safe_filename(client_name)}.pdf", key="pdf_dl_web")
-                except Exception as e: st.error(f"PDF Gen Error: {e}")
-            with col_dl1:
-                if st.session_state.is_supervisor:
-                    if rows:
-                        try:
-                            xlsx = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
-                            st.download_button("📥 下載 Excel (主管權限)", xlsx, f"Cue_{safe_filename(client_name)}.xlsx", key="xlsx_dl")
-                        except Exception as e: st.error(f"Excel Error: {e}")
-                else: st.info("🔒 Excel 下載功能僅限主管使用")
+            st.markdown("---")
+            st.subheader("📥 檔案下載區")
+            st.info("為了避免畫面卡頓，請確認上方設定無誤後，點擊下方按鈕以生成檔案。")
+
+            # 生成按鈕 (點擊才執行耗時運算)
+            if st.button("🚀 生成/更新 下載檔案"):
+                with st.spinner("檔案生成中，請稍候... (PDF轉檔需時較長)"):
+                    try:
+                        # 耗時運算
+                        xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
+                        
+                        # 嘗試 PDF 轉檔
+                        pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
+                        if not pdf_bytes:
+                            pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
+                            method = "Web Engine"
+                        
+                        # 存入 Session State
+                        st.session_state['generated_xlsx'] = xlsx_temp
+                        st.session_state['generated_pdf'] = pdf_bytes
+                        st.session_state['pdf_method'] = method
+                        st.session_state['gen_time'] = datetime.now().strftime("%H:%M:%S")
+                        
+                        st.success("✅ 檔案生成完畢！")
+                        
+                    except Exception as e:
+                        st.error(f"生成失敗: {e}")
+
+            # 顯示下載按鈕
+            if 'generated_xlsx' in st.session_state and 'generated_pdf' in st.session_state:
+                st.caption(f"上次生成時間: {st.session_state.get('gen_time')}")
+                
+                col_dl1, col_dl2 = st.columns(2)
+                
+                with col_dl2:
+                    if st.session_state['generated_pdf']:
+                        st.download_button(
+                            f"📥 下載 PDF ({st.session_state['pdf_method']})", 
+                            st.session_state['generated_pdf'], 
+                            f"Cue_{safe_filename(client_name)}.pdf", 
+                            key="pdf_dl_btn",
+                            mime="application/pdf"
+                        )
+                    else:
+                        st.warning("無法生成 PDF")
+
+                with col_dl1:
+                    if st.session_state.is_supervisor:
+                        st.download_button(
+                            "📥 下載 Excel (主管權限)", 
+                            st.session_state['generated_xlsx'], 
+                            f"Cue_{safe_filename(client_name)}.xlsx", 
+                            key="xlsx_dl_btn",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        )
+                    else:
+                        st.info("🔒 Excel 下載功能僅限主管使用")
 
     except Exception as e:
         st.error("程式執行發生錯誤，請聯絡開發者。")
