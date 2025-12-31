@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v110.0 (Layout Restore)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v110.1 (Dongwu Fix)")
 
 import pandas as pd
 import math
@@ -321,7 +321,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 if curr.weekday() >= 5: c_w.fill = FILL_WEEKEND
                 curr += timedelta(days=1)
             c_d.font = FONT_STD; c_w.font = FONT_STD; c_d.alignment = ALIGN_CENTER; c_w.alignment = ALIGN_CENTER; c_d.border = BORDER_ALL_THIN; c_w.border = BORDER_ALL_THIN
-            # Apply Medium Border to Date Header Area
+            # Gridline Fix: Ensure gridlines are present, and specific borders are medium
             set_border(c_d, top=BS_MEDIUM)
             set_border(c_w, bottom=BS_MEDIUM)
 
@@ -376,39 +376,65 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                     if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col, end_row=m_end, end_column=col)
                     m_start = m_end + 1
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, 39)
+            
+            # Gridline Fix 1: Medium border on right of Station (Col 1)
+            for r in range(start_merge, curr_row):
+                set_border(ws.cell(r, 1), right=BS_MEDIUM)
+            # Gridline Fix 2: Medium border on left of 檔次 (Col 39/AM)
+            for r in range(start_merge, curr_row):
+                set_border(ws.cell(r, 39), left=BS_MEDIUM)
 
-        # --- Footer Logic (Restored v86: Vertical VAT List) ---
+        # --- v110.1: Restore Total Row ---
+        ws.row_dimensions[curr_row].height = 30
+        ws.cell(curr_row, 6, "Total").alignment = ALIGN_RIGHT; ws.cell(curr_row, 6).font = FONT_BOLD
+        ws.cell(curr_row, 7, budget).number_format = FMT_MONEY; ws.cell(curr_row, 7).alignment = ALIGN_CENTER; ws.cell(curr_row, 7).font = FONT_BOLD
+        
+        # Calculate daily spots sums
+        total_spots_all = 0
+        for d_idx in range(eff_days):
+            col_idx = 8 + d_idx
+            daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
+            total_spots_all += daily_sum
+            c = ws.cell(curr_row, col_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD; c.number_format = FMT_NUMBER
+        
+        ws.cell(curr_row, 39, total_spots_all).alignment = ALIGN_CENTER; ws.cell(curr_row, 39).font = FONT_BOLD
+        
+        # Apply borders to Total Row
+        for c_idx in range(1, 40):
+            set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
+        # Fix outer vertical borders for Total Row
+        set_border(ws.cell(curr_row, 1), left=BS_MEDIUM)
+        set_border(ws.cell(curr_row, 39), right=BS_MEDIUM)
+        
+        curr_row += 1
+
+        # --- Footer Items (Media, Prod, VAT, Grand Total) ---
         vat = int(budget * 0.05); grand_total = budget + vat
         footer_items = [("媒體", budget), ("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
         
-        start_footer_row = curr_row
         for label, val in footer_items:
-            if label == "媒體" and prod == 0: continue # Skip media line if prod is 0 to imply simple sum, or adjust logic
-            # Actually standard v86 Dongwu logic:
-            if label == "媒體": continue # Usually implicit in column sum, we start showing from Prod/VAT
-            
+            if label == "媒體": continue # 媒體費已在 Total 列呈現，這裡通常隱藏或僅顯示製作費後的加總
             ws.row_dimensions[curr_row].height = 30
-            c_l = ws.cell(curr_row, 6); c_l.value = label; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
+            
+            # v110.1: Left Alignment
+            c_l = ws.cell(curr_row, 6); c_l.value = label; c_l.alignment = ALIGN_LEFT; c_l.font = FONT_STD
             c_v = ws.cell(curr_row, 7); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_STD
             
-            # Apply borders to the label/value pair
             set_border(c_l, left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
             set_border(c_v, right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
             
             if label == "Grand Total":
-                # Grand Total Row needs medium border on bottom and spans across? 
-                # v86 usually draws a line across the whole schedule for Grand Total
                 for c_idx in range(1, 40): set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM)
-            
             curr_row += 1
         
-        # Draw outer border for the whole data block (connects headers to footer)
         draw_outer_border_fast(ws, 7, curr_row-1, 1, 39)
         
         curr_row += 1; ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True, underline='single')
         for rm in remarks_list:
             curr_row += 1
-            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=14, color="FF0000" if rm.startswith("1") else "000000")
+            # v110.1: Point 4 is also red
+            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
+            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=14, color="FF0000" if is_red else "000000")
         return curr_row
 
     # -------------------------------------------------------------
@@ -588,7 +614,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v110.0 Restore)")
+        st.title("📺 媒體 Cue 表生成器 (v110.1 Dongwu Fix)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
