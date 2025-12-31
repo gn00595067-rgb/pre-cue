@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v110.3 (Dongwu Final Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v110.4 (Dongwu TopLine)")
 
 import pandas as pd
 import math
@@ -289,7 +289,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=SIDE_MEDIUM)
 
     # -------------------------------------------------------------
-    # Render Logic: Dongwu (v110.3 Polish)
+    # Render Logic: Dongwu (v110.3)
     # -------------------------------------------------------------
     def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod):
         COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
@@ -307,6 +307,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for pos, lbl, val in infos:
             c = ws[pos]; c.value = lbl; c.font = FONT_BOLD; c.alignment = Alignment(vertical='center')
             c2 = ws.cell(c.row, 2); c2.value = val; c2.font = FONT_BOLD; c2.alignment = Alignment(vertical='center')
+        
+        # v110.4: Top Border for Row 3 (A3 ~ AM3)
+        for c_idx in range(1, 40): set_border(ws.cell(3, c_idx), top=BS_MEDIUM)
 
         ws['H6'] = f"{start_dt.month}月"; ws['H6'].font = Font(name=FONT_MAIN, size=16, bold=True); ws['H6'].alignment = ALIGN_CENTER
         
@@ -319,13 +322,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c8 = ws.cell(8, col_idx)
             c7.font = FONT_BOLD; c7.alignment = ALIGN_CENTER
             
-            # 1. Apply Thin Border to both cells to ensure vertical lines appear
-            c7.border = BORDER_ALL_THIN
-            c8.border = BORDER_ALL_THIN
-            
-            # 2. Apply Outer Medium Borders
-            set_border(c7, top=BS_MEDIUM)
-            set_border(c8, bottom=BS_MEDIUM)
+            c7.border = BORDER_ALL_THIN; c8.border = BORDER_ALL_THIN
+            set_border(c7, top=BS_MEDIUM); set_border(c8, bottom=BS_MEDIUM)
 
         eff_days = (end_dt - start_dt).days + 1; curr = start_dt
         for i in range(31):
@@ -336,17 +334,15 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 curr += timedelta(days=1)
             c_d.font = FONT_STD; c_w.font = FONT_STD; c_d.alignment = ALIGN_CENTER; c_w.alignment = ALIGN_CENTER
             c_d.border = BORDER_ALL_THIN; c_w.border = BORDER_ALL_THIN
-            set_border(c_d, top=BS_MEDIUM)
-            set_border(c_w, bottom=BS_MEDIUM)
+            set_border(c_d, top=BS_MEDIUM); set_border(c_w, bottom=BS_MEDIUM)
 
-        # Spots Header
         ws['AM7'] = "檔次"; ws.merge_cells("AM7:AM8")
         ws['AM7'].font = FONT_BOLD; ws['AM7'].alignment = ALIGN_CENTER
         ws['AM7'].border = BORDER_ALL_THIN; ws['AM8'].border = BORDER_ALL_THIN
         set_border(ws['AM7'], top=BS_MEDIUM, left=BS_MEDIUM)
-        set_border(ws['AM8'], bottom=BS_MEDIUM, left=BS_MEDIUM) 
+        # v110.3 Fix: AM8 gets medium left border too
+        set_border(ws['AM8'], bottom=BS_MEDIUM, left=BS_MEDIUM)
 
-        # Station (A) Right -> Medium
         set_border(ws['A7'], right=BS_MEDIUM); set_border(ws['A8'], right=BS_MEDIUM)
 
         curr_row = 9; grouped_data = {
@@ -407,7 +403,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 set_border(ws.cell(r, 1), right=BS_MEDIUM)
                 set_border(ws.cell(r, 39), left=BS_MEDIUM)
 
-        # --- Total Row ---
+        # --- Total Row (v110.3: Fonts) ---
         ws.row_dimensions[curr_row].height = 30
         
         c_lbl = ws.cell(curr_row, 5, "Total"); c_lbl.alignment = ALIGN_CENTER; c_lbl.font = FONT_BOLD
@@ -419,10 +415,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             col_idx = 8 + d_idx
             daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
             total_spots_all += daily_sum
-            # Fix: Daily sums NOT Bold
+            # Fix: Daily sums NOT Bold (FONT_STD)
             c = ws.cell(curr_row, col_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_STD; c.number_format = FMT_NUMBER
         
-        ws.cell(curr_row, 39, total_spots_all).alignment = ALIGN_CENTER; ws.cell(curr_row, 39).font = FONT_STD # Spots total also normal? Let's check user request "Except F and G"
+        ws.cell(curr_row, 39, total_spots_all).alignment = ALIGN_CENTER; ws.cell(curr_row, 39).font = FONT_STD # Spots total also normal
         
         for c_idx in range(1, 40):
             set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
