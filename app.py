@@ -5,7 +5,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定 (必須是程式的第一個有效指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v102.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v103.0")
 
 import pandas as pd
 import math
@@ -572,10 +572,13 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     elif format_type == "Bolin": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "規格", "單價", "金額"]
     th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
     
-    unique_media = sorted(list(set([r['media'] for r in rows]))); medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
+    unique_media = sorted(list(set([r['media'] for r in rows])))
+    # [FIX] Medium String: Use actual data regardless of format
+    order = {"全家廣播": 1, "新鮮視": 2, "家樂福": 3}
+    unique_media.sort(key=lambda x: order.get(x, 99))
+    medium_str = "/".join(unique_media)
     
     tbody = ""; rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
-    pkg_tracker = {}
     
     # Using groupby for Rowspan Logic in HTML
     for key, group in groupby(rows_sorted, lambda x: (x['media'], x['seconds'], x.get('nat_pkg_display', 0))):
@@ -637,7 +640,7 @@ def main():
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
         # Main UI
-        st.title("📺 媒體 Cue 表生成器 (v102.0)")
+        st.title("📺 媒體 Cue 表生成器 (v103.0)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
@@ -769,13 +772,6 @@ def main():
             rem = get_remarks_text(sign_deadline, billing_month, payment_date)
             html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
             st.components.v1.html(html_preview, height=700, scrolling=True)
-            
-            with st.expander("💡 系統運算邏輯說明 (Debug Panel)", expanded=False):
-                for log in logs:
-                    st.markdown(f"### {log['Media']}"); st.markdown(f"- **預算**: {log['Budget']}"); st.markdown(f"- **狀態**: {log['Status']}")
-                    if 'Details' in log:
-                        for detail in log['Details']: st.info(detail)
-                    st.divider()
             
             col_dl1, col_dl2 = st.columns(2)
             with col_dl2:
