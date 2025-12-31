@@ -5,7 +5,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定 (必須是程式的第一個有效指令)
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v104.0")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v105.0")
 
 import pandas as pd
 import math
@@ -24,10 +24,17 @@ from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill, Color
 
 # =========================================================
-# 2. Session State 初始化 (確保狀態存在)
+# 2. Session State 初始化 (集中管理，防止衝突)
 # =========================================================
-if "is_supervisor" not in st.session_state:
-    st.session_state.is_supervisor = False
+# 系統與登入狀態
+if "is_supervisor" not in st.session_state: st.session_state.is_supervisor = False
+
+# 媒體勾選狀態 (Checkboxes) - [FIX] 初始化移至此處
+if "cb_rad" not in st.session_state: st.session_state.cb_rad = True
+if "cb_fv" not in st.session_state: st.session_state.cb_fv = False
+if "cb_cf" not in st.session_state: st.session_state.cb_cf = False
+
+# 預算分配狀態 (Sliders)
 if "rad_share" not in st.session_state: st.session_state.rad_share = 100
 if "fv_share" not in st.session_state: st.session_state.fv_share = 0
 if "cf_share" not in st.session_state: st.session_state.cf_share = 0
@@ -576,23 +583,40 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     unique_media = sorted(list(set([r['media'] for r in rows]))); medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
     
     tbody = ""; rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
+    
+    # Using groupby for Rowspan Logic in HTML
     for key, group in groupby(rows_sorted, lambda x: (x['media'], x['seconds'], x.get('nat_pkg_display', 0))):
-        g_list = list(group); g_size = len(g_list); is_pkg = g_list[0]['is_pkg_member']
+        g_list = list(group)
+        g_size = len(g_list)
+        is_pkg = g_list[0]['is_pkg_member']
+        
         for i, r in enumerate(g_list):
-            tbody += "<tr>"; rate = f"${r['rate_display']:,}" if isinstance(r['rate_display'], (int, float)) else r['rate_display']
+            tbody += "<tr>"
+            rate = f"${r['rate_display']:,}" if isinstance(r['rate_display'], (int, float)) else r['rate_display']
+            
+            # Package Cost Logic
             pkg_val_str = ""
             if is_pkg:
-                if i == 0: val = f"${r['nat_pkg_display']:,}"; pkg_val_str = f"<td class='right' rowspan='{g_size}'>{val}</td>"
-            else: val = f"${r['pkg_display']:,}" if isinstance(r['pkg_display'], (int, float)) else r['pkg_display']; pkg_val_str = f"<td class='right'>{val}</td>"
+                if i == 0:
+                    val = f"${r['nat_pkg_display']:,}"
+                    pkg_val_str = f"<td class='right' rowspan='{g_size}'>{val}</td>"
+            else:
+                val = f"${r['pkg_display']:,}" if isinstance(r['pkg_display'], (int, float)) else r['pkg_display']
+                pkg_val_str = f"<td class='right'>{val}</td>"
+
             if format_type == "Shenghuo": 
-                sec_txt = f"{r['seconds']}秒"; tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td><td>{rate}</td>{pkg_val_str}"
+                sec_txt = f"{r['seconds']}秒"
+                tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td><td>{rate}</td>{pkg_val_str}"
             elif format_type == "Bolin": 
                 tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}秒</td><td>{rate}</td>{pkg_val_str}"
             else: 
                 tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td>{pkg_val_str}"
+            
             for d in r['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
             tbody += "</tr>"
-    remarks_html = "<br>".join([html_escape(x) for x in remarks]); vat = int(round(budget * 0.05))
+        
+    remarks_html = "<br>".join([html_escape(x) for x in remarks])
+    vat = int(round(budget * 0.05))
     footer_html = f"<div style='margin-top:10px; font-weight:bold; text-align:right;'>製作費: ${prod:,}<br>5% VAT: ${vat:,}<br>Grand Total: ${grand_total:,}</div>"
     return f"<html><head><style>body {{ font-family: sans-serif; font-size: 10px; }} table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }} .bg-dw-head {{ background-color: #4472C4; color: white; }} .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }} .bg-bolin-head {{ background-color: #F8CBAD; color: black; }} .bg-weekend {{ background-color: #FFFFCC; }}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
 
@@ -615,7 +639,7 @@ try:
             st.success("✅ 目前狀態：主管模式")
             if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
-    st.title("📺 媒體 Cue 表生成器 (v104.0)")
+    st.title("📺 媒體 Cue 表生成器 (v103.0)")
     format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
     c1, c2, c3, c4, c5_sales = st.columns(5)
