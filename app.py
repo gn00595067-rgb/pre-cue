@@ -6,7 +6,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v102.1 (Speed)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v102.2 (Diagnostic)")
 
 import pandas as pd
 import math
@@ -68,7 +68,6 @@ def region_display(region):
     return REGION_DISPLAY_MAP.get(region, region)
 
 def find_soffice_path():
-    # 搜尋系統中的 LibreOffice，但現在我們儘量不使用它
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if soffice: return soffice
     if os.name == "nt":
@@ -78,14 +77,12 @@ def find_soffice_path():
     return None
 
 def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
-    # 這個函式非常慢，除非必要，否則不要呼叫
     soffice = find_soffice_path()
     if not soffice: return None, "Fail", "無可用的 LibreOffice 引擎"
     try:
         with tempfile.TemporaryDirectory() as tmp:
             xlsx_path = os.path.join(tmp, "cue.xlsx")
             with open(xlsx_path, "wb") as f: f.write(xlsx_bytes)
-            # 增加 timeout 到 30 秒，避免永久卡死
             subprocess.run([soffice, "--headless", "--nologo", "--convert-to", "pdf:calc_pdf_Export", "--outdir", tmp, xlsx_path], capture_output=True, timeout=30)
             pdf_path = os.path.join(tmp, "cue.pdf")
             if not os.path.exists(pdf_path):
@@ -99,12 +96,10 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
     except Exception as e: return None, "Fail", str(e)
 
 def html_to_pdf_weasyprint(html_str):
-    # 這是最快的轉檔方式
     try:
         from weasyprint import HTML, CSS
         from weasyprint.text.fonts import FontConfiguration
         font_config = FontConfiguration()
-        # 簡化 CSS，使用系統預設字型，避免下載
         css = CSS(string="@page { size: A4 landscape; margin: 1cm; } body { font-family: 'Microsoft JhengHei', sans-serif; }")
         pdf_bytes = HTML(string=html_str).write_pdf(stylesheets=[css], font_config=font_config)
         return pdf_bytes, ""
@@ -382,11 +377,17 @@ def render_data_rows(ws, rows, start_row, final_budget_val, eff_days, mode, prod
     font_content = Font(name=FONT_MAIN, size=14 if mode in ["Dongwu","Shenghuo"] else 12)
     row_height = 40 if mode in ["Dongwu","Shenghuo"] else 25
 
+    # 確保長程式碼不會在複製時被截斷，這裡使用變數分行處理
+    rows_rad = [r for r in rows if r["media"] == "全家廣播"]
+    rows_fv = [r for r in rows if r["media"] == "新鮮視"]
+    rows_cf = [r for r in rows if r["media"] == "家樂福"]
+
     grouped_data = {
-        "全家廣播": sorted([r for r in rows if r["media"] == "全家廣播"], key=lambda x: x["seconds"]),
-        "新鮮視": sorted([r for r in rows if r["media"] == "新鮮視"], key=lambda x: x["seconds"]),
-        "家樂福": sorted([r for r in rows if r["media"] == "家樂福"], key=lambda x: x["seconds"]),
+        "全家廣播": sorted(rows_rad, key=lambda x: x["seconds"]),
+        "新鮮視": sorted(rows_fv, key=lambda x: x["seconds"]),
+        "家樂福": sorted(rows_cf, key=lambda x: x["seconds"]),
     }
+
     max_c = 39 if mode == "Dongwu" else 5 + eff_days + 3
     if mode == "Bolin": max_c = 1 + 5 + eff_days + 3
 
@@ -604,7 +605,8 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
 def main():
     try:
         # Load Data
-        STORE_COUNTS, STORE_COUNTS_NUM, PRICING_DB, SEC_FACTORS, err_msg = load_config_from_cloud(GSHEET_SHARE_URL)
+        with st.spinner("正在讀取 Google 試算表設定檔..."):
+            STORE_COUNTS, STORE_COUNTS_NUM, PRICING_DB, SEC_FACTORS, err_msg = load_config_from_cloud(GSHEET_SHARE_URL)
         if err_msg:
             st.error(f"❌ 設定檔載入失敗: {err_msg}")
             st.stop()
@@ -622,7 +624,7 @@ def main():
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
 
         # Main UI
-        st.title("📺 媒體 Cue 表生成器 (v102.1 極速版)")
+        st.title("📺 媒體 Cue 表生成器 (v102.2 診斷版)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
@@ -760,7 +762,7 @@ def main():
             st.session_state['debug_logs'] = logs # Store for persistent debug
             with st.expander("💡 系統運算與效能監控", expanded=False):
                 if 'timing_log' in st.session_state:
-                    st.markdown("### ⏱️ 效能計時")
+                    st.markdown("### ⏱️ 效能計時 (最近一次)")
                     for t in st.session_state['timing_log']: st.text(t)
                 st.divider()
                 for log in logs:
@@ -771,42 +773,55 @@ def main():
             st.info("💡 為了避免畫面卡頓，請確認上方設定無誤後，點擊下方按鈕以生成檔案。")
 
             # -----------------------------------------------------------
-            # 極速生成邏輯
+            # 診斷控制項
             # -----------------------------------------------------------
+            skip_pdf = st.checkbox("⚙️ 僅生成 Excel (排除 PDF 轉檔變因)", value=False)
+
             if st.button("🚀 生成/更新 下載檔案"):
                 st.session_state['timing_log'] = [] # Reset Log
-                
-                with st.spinner("正在極速運算中..."):
+                progress_ph = st.empty() # Placeholder for real-time log
+
+                with st.spinner("正在運算中..."):
                     try:
                         t0 = time.time()
-                        # 1. Excel (Fast)
+                        
+                        # Step 1: Excel Generation
+                        progress_ph.text("步驟 1/2: 正在繪製 Excel 表格...")
                         xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
                         t1 = time.time()
-                        st.session_state['timing_log'].append(f"Excel 生成: {t1-t0:.2f}秒")
+                        excel_time = t1 - t0
+                        st.session_state['timing_log'].append(f"Excel 生成: {excel_time:.2f}秒")
                         
-                        # 2. PDF Strategy: Web Engine ONLY (Fastest)
-                        # 我們不再嘗試呼叫 LibreOffice，因為它會導致卡頓
-                        t2_start = time.time()
+                        # Step 2: PDF Generation (Optional)
                         pdf_bytes = None
-                        method = "Web Engine (Fast)"
+                        method = "Skipped"
                         
-                        # 嘗試用快速的網頁轉檔
-                        pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
-                        
-                        if not pdf_bytes:
-                            st.warning(f"Web 引擎轉檔失敗 ({err})，請使用 Excel 下載功能。")
-                            method = "Failed"
-                        
-                        t2_end = time.time()
-                        st.session_state['timing_log'].append(f"PDF 生成 ({method}): {t2_end-t2_start:.2f}秒")
+                        if not skip_pdf:
+                            progress_ph.text("步驟 2/2: 正在進行 PDF 轉檔 (Web Engine)...")
+                            t2_start = time.time()
+                            method = "Web Engine"
+                            # 嘗試用快速的網頁轉檔
+                            pdf_bytes, err = html_to_pdf_weasyprint(html_preview)
+                            
+                            if not pdf_bytes:
+                                st.warning(f"Web 引擎轉檔失敗 ({err})，請使用 Excel 下載功能。")
+                                method = "Failed"
+                            
+                            t2_end = time.time()
+                            pdf_time = t2_end - t2_start
+                            st.session_state['timing_log'].append(f"PDF 生成 ({method}): {pdf_time:.2f}秒")
+                        else:
+                            st.session_state['timing_log'].append("PDF 生成: 已跳過")
 
-                        # 3. Store
+                        # 3. Store Results
                         st.session_state['generated_xlsx'] = xlsx_temp
                         st.session_state['generated_pdf'] = pdf_bytes
                         st.session_state['pdf_method'] = method
                         st.session_state['gen_time'] = datetime.now().strftime("%H:%M:%S")
                         
-                        st.success(f"✅ 運算完成！(總耗時: {t2_end-t0:.2f}秒)")
+                        total_time = time.time() - t0
+                        progress_ph.text(f"完成！總耗時: {total_time:.2f}秒")
+                        st.success(f"✅ 運算完成！(Excel: {excel_time:.2f}s | 總計: {total_time:.2f}s)")
                         
                     except Exception as e:
                         st.error(f"生成過程發生錯誤: {e}")
@@ -826,7 +841,7 @@ def main():
                             key="pdf_dl_btn",
                             mime="application/pdf"
                         )
-                    else:
+                    elif not skip_pdf:
                         st.warning("⚠️ 無法生成 PDF，請下載 Excel")
 
                 with col_dl1:
