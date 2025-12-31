@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v109.0 (Direct)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v110.0 (Layout Restore)")
 
 import pandas as pd
 import math
@@ -106,7 +106,6 @@ def find_soffice_path():
             if os.path.exists(p): return p
     return None
 
-# [快取優化] 加入 Cache，避免重複運算
 @st.cache_data(show_spinner="正在生成 PDF (LibreOffice)...", ttl=3600)
 def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
     soffice = find_soffice_path()
@@ -116,18 +115,11 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
         with tempfile.TemporaryDirectory() as tmp:
             xlsx_path = os.path.join(tmp, "cue.xlsx")
             with open(xlsx_path, "wb") as f: f.write(xlsx_bytes)
-            
-            subprocess.run(
-                [soffice, "--headless", "--nologo", "--convert-to", "pdf:calc_pdf_Export", "--outdir", tmp, xlsx_path], 
-                capture_output=True, 
-                timeout=60
-            )
-            
+            subprocess.run([soffice, "--headless", "--nologo", "--convert-to", "pdf:calc_pdf_Export", "--outdir", tmp, xlsx_path], capture_output=True, timeout=60)
             pdf_path = os.path.join(tmp, "cue.pdf")
             if not os.path.exists(pdf_path):
                 for fn in os.listdir(tmp):
                     if fn.endswith(".pdf"): pdf_path = os.path.join(tmp, fn); break
-            
             if os.path.exists(pdf_path):
                 with open(pdf_path, "rb") as f: return f.read(), "LibreOffice", ""
             return None, "Fail", "LibreOffice 未產出檔案"
@@ -149,35 +141,22 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     if format_type == "Shenghuo": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "秒數/規格", "單價", "金額"]
     elif format_type == "Bolin": cols_def = ["頻道", "播出地區", "播出店數", "播出時間", "規格", "單價", "金額"]
     th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
-    
     unique_media = sorted(list(set([r['media'] for r in rows]))); medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
-    
     tbody = ""; rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
-    
     for key, group in groupby(rows_sorted, lambda x: (x['media'], x['seconds'], x.get('nat_pkg_display', 0))):
-        g_list = list(group)
-        g_size = len(g_list)
-        is_pkg = g_list[0]['is_pkg_member']
-        
+        g_list = list(group); g_size = len(g_list); is_pkg = g_list[0]['is_pkg_member']
         for i, r in enumerate(g_list):
-            tbody += "<tr>"
-            rate = f"${r['rate_display']:,}" if isinstance(r['rate_display'], (int, float)) else r['rate_display']
+            tbody += "<tr>"; rate = f"${r['rate_display']:,}" if isinstance(r['rate_display'], (int, float)) else r['rate_display']
             pkg_val_str = ""
             if is_pkg:
-                if i == 0:
-                    val = f"${r['nat_pkg_display']:,}"; pkg_val_str = f"<td class='right' rowspan='{g_size}'>{val}</td>"
+                if i == 0: val = f"${r['nat_pkg_display']:,}"; pkg_val_str = f"<td class='right' rowspan='{g_size}'>{val}</td>"
             else:
                 val = f"${r['pkg_display']:,}" if isinstance(r['pkg_display'], (int, float)) else r['pkg_display']; pkg_val_str = f"<td class='right'>{val}</td>"
-
-            if format_type == "Shenghuo": 
-                sec_txt = f"{r['seconds']}秒"; tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td><td>{rate}</td>{pkg_val_str}"
-            elif format_type == "Bolin": 
-                tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}秒</td><td>{rate}</td>{pkg_val_str}"
-            else: 
-                tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td>{pkg_val_str}"
+            if format_type == "Shenghuo": sec_txt = f"{r['seconds']}秒"; tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{sec_txt}</td><td>{rate}</td>{pkg_val_str}"
+            elif format_type == "Bolin": tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}秒</td><td>{rate}</td>{pkg_val_str}"
+            else: tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td>{pkg_val_str}"
             for d in r['schedule'][:eff_days]: tbody += f"<td>{d}</td>"
             tbody += "</tr>"
-        
     remarks_html = "<br>".join([html_escape(x) for x in remarks])
     vat = int(round(budget * 0.05)); footer_html = f"<div style='margin-top:10px; font-weight:bold; text-align:right;'>製作費: ${prod:,}<br>5% VAT: ${vat:,}<br>Grand Total: ${grand_total:,}</div>"
     return f"<html><head><style>body {{ font-family: sans-serif; font-size: 10px; }} table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }} .bg-dw-head {{ background-color: #4472C4; color: white; }} .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }} .bg-bolin-head {{ background-color: #F8CBAD; color: black; }} .bg-weekend {{ background-color: #FFFFCC; }}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
@@ -271,7 +250,6 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # 7. Render Engines (Optimized with Object Pooling & Caching)
 # =========================================================
 
-# [快取優化] 加入 Cache，提升重複點擊時的速度
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
     import openpyxl
@@ -311,7 +289,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=SIDE_MEDIUM)
 
     # -------------------------------------------------------------
-    # Render Logic: Dongwu
+    # Render Logic: Dongwu (Restored v86 Layout)
     # -------------------------------------------------------------
     def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod):
         COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
@@ -343,6 +321,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 if curr.weekday() >= 5: c_w.fill = FILL_WEEKEND
                 curr += timedelta(days=1)
             c_d.font = FONT_STD; c_w.font = FONT_STD; c_d.alignment = ALIGN_CENTER; c_w.alignment = ALIGN_CENTER; c_d.border = BORDER_ALL_THIN; c_w.border = BORDER_ALL_THIN
+            # Apply Medium Border to Date Header Area
+            set_border(c_d, top=BS_MEDIUM)
+            set_border(c_w, bottom=BS_MEDIUM)
 
         ws['AM7'] = "檔次"; ws.merge_cells("AM7:AM8"); ws['AM7'].font = FONT_BOLD; ws['AM7'].alignment = ALIGN_CENTER; ws['AM7'].border = BORDER_ALL_MEDIUM
 
@@ -396,15 +377,35 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                     m_start = m_end + 1
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, 39)
 
-        ws.row_dimensions[curr_row].height = 30
-        c_lbl = ws.cell(curr_row, 6, "Grand Total"); c_lbl.alignment = ALIGN_RIGHT; c_lbl.font = FONT_STD
-        vat = int(budget * 0.05)
-        c_val = ws.cell(curr_row, 7, budget + vat); c_val.number_format = FMT_MONEY; c_val.alignment = ALIGN_CENTER; c_val.font = FONT_STD
-        total_spots = sum([sum(r['schedule']) for r in rows]); ws.cell(curr_row, 39, total_spots).alignment = ALIGN_CENTER
-        draw_outer_border_fast(ws, curr_row, curr_row, 1, 39)
+        # --- Footer Logic (Restored v86: Vertical VAT List) ---
+        vat = int(budget * 0.05); grand_total = budget + vat
+        footer_items = [("媒體", budget), ("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
         
-        curr_row += 2
-        ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True, underline='single')
+        start_footer_row = curr_row
+        for label, val in footer_items:
+            if label == "媒體" and prod == 0: continue # Skip media line if prod is 0 to imply simple sum, or adjust logic
+            # Actually standard v86 Dongwu logic:
+            if label == "媒體": continue # Usually implicit in column sum, we start showing from Prod/VAT
+            
+            ws.row_dimensions[curr_row].height = 30
+            c_l = ws.cell(curr_row, 6); c_l.value = label; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
+            c_v = ws.cell(curr_row, 7); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_STD
+            
+            # Apply borders to the label/value pair
+            set_border(c_l, left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
+            set_border(c_v, right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
+            
+            if label == "Grand Total":
+                # Grand Total Row needs medium border on bottom and spans across? 
+                # v86 usually draws a line across the whole schedule for Grand Total
+                for c_idx in range(1, 40): set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM)
+            
+            curr_row += 1
+        
+        # Draw outer border for the whole data block (connects headers to footer)
+        draw_outer_border_fast(ws, 7, curr_row-1, 1, 39)
+        
+        curr_row += 1; ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True, underline='single')
         for rm in remarks_list:
             curr_row += 1
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=14, color="FF0000" if rm.startswith("1") else "000000")
@@ -587,7 +588,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v109.0 Direct)")
+        st.title("📺 媒體 Cue 表生成器 (v110.0 Restore)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
@@ -723,18 +724,12 @@ def main():
             st.markdown("---")
             st.subheader("📥 檔案下載區")
             
-            # --- 直覺式下載 (Logic v109) ---
-            
-            # 1. 預先準備 (Cache Hit = Instant)
+            # --- 直覺式下載 ---
             xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
             
             col_dl1, col_dl2 = st.columns(2)
             
-            # 2. PDF Download (Only calc when user clicks, or pre-calc if fast)
-            # 為了避免每次小改動都要跑 LibreOffice (慢)，我們這裡用 "Lazy" 邏輯：
-            # 下載按鈕直接連到 Cache 函數。只有第一次按 (或參數變更後第一次按) 會轉圈圈。
             with col_dl2:
-                # 呼叫 Cache Function
                 pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
                 if pdf_bytes:
                     st.download_button(
@@ -747,7 +742,6 @@ def main():
                 else:
                     st.warning(f"PDF 生成失敗: {err}")
 
-            # 3. Excel Download (Fast)
             with col_dl1:
                 if st.session_state.is_supervisor:
                     st.download_button(
