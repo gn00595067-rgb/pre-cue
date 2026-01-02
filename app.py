@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.13 (Shenghuo Line Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.13 (Shenghuo Row/Font)")
 
 import pandas as pd
 import math
@@ -451,44 +451,49 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Shenghuo (v111.12 Bold Footer)
+    # Render Logic: Shenghuo (v111.13 Row/Font Fix)
     # -------------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
         total_cols = end_c_start + 2
 
-        ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0 # (1) E Width 15.0
+        ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0
         for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1 
         ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5 
         ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0 
         ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0 
         
-        ROW_H_MAP = {1:30, 2:30, 3:25, 4:25, 5:25, 6:25, 7:35, 8:35}
+        # (1) & (2) Row Height Fixes
+        ROW_H_MAP = {1:30, 2:30, 3:46, 4:46, 5:40, 6:40, 7:35, 8:35} # Rows 3,4 -> 46; Rows 5,6 -> 40
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
         
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']; c1.value = "聲活數位-媒體計劃排程表"; c1.font = Font(name=FONT_MAIN, size=24, bold=True); c1.alignment = ALIGN_CENTER
         ws.merge_cells(f"A2:{get_column_letter(total_cols)}2"); c2 = ws['A2']; c2.value = "Media Schedule"; c2.font = Font(name=FONT_MAIN, size=18, bold=True); c2.alignment = ALIGN_CENTER
         
-        ws.merge_cells(f"A3:{get_column_letter(total_cols)}3"); ws['A3'].value = "聲活數位科技股份有限公司 統編 28710100"; ws['A3'].font = FONT_STD; ws['A3'].alignment = ALIGN_LEFT
-        ws.merge_cells(f"A4:{get_column_letter(total_cols)}4"); ws['A4'].value = "蔡伊閔"; ws['A4'].font = FONT_STD; ws['A4'].alignment = ALIGN_LEFT
+        # (1) Font Size 16 for Rows 3, 4
+        FONT_16 = Font(name=FONT_MAIN, size=16)
+        ws.merge_cells(f"A3:{get_column_letter(total_cols)}3"); ws['A3'].value = "聲活數位科技股份有限公司 統編 28710100"; ws['A3'].font = FONT_16; ws['A3'].alignment = ALIGN_LEFT
+        ws.merge_cells(f"A4:{get_column_letter(total_cols)}4"); ws['A4'].value = "蔡伊閔"; ws['A4'].font = FONT_16; ws['A4'].alignment = ALIGN_LEFT
         
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
         space_gap = "　" * 10
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
         info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}"
         
+        # (2) Font Size 14 for Rows 5, 6
+        FONT_14 = Font(name=FONT_MAIN, size=14)
         mid_split_col = end_c_start
         ws.merge_cells(f"A5:{get_column_letter(mid_split_col)}5")
-        c5 = ws['A5']; c5.value = info_text; c5.font = FONT_STD; c5.alignment = ALIGN_LEFT 
+        c5 = ws['A5']; c5.value = info_text; c5.font = FONT_14; c5.alignment = ALIGN_LEFT 
         
         ws.merge_cells(f"{get_column_letter(end_c_start+1)}5:{get_column_letter(total_cols)}5")
-        c5_r = ws[f"{get_column_letter(end_c_start+1)}5"]; c5_r.value = period_str; c5_r.font = FONT_STD; c5_r.alignment = ALIGN_LEFT 
+        c5_r = ws[f"{get_column_letter(end_c_start+1)}5"]; c5_r.value = period_str; c5_r.font = FONT_14; c5_r.alignment = ALIGN_LEFT 
         
         draw_outer_border_fast(ws, 5, 5, 1, total_cols)
 
         ws.merge_cells(f"A6:{get_column_letter(total_cols)}6")
-        c6 = ws['A6']; c6.value = f"廣告名稱：{product_name}"; c6.font = FONT_STD; c6.alignment = ALIGN_LEFT
+        c6 = ws['A6']; c6.value = f"廣告名稱：{product_name}"; c6.font = FONT_14; c6.alignment = ALIGN_LEFT
         draw_outer_border_fast(ws, 6, 6, 1, total_cols)
         
         headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
@@ -617,7 +622,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
-        # (2) Grand total row (A to End) bottom medium border
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
         
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
@@ -630,7 +634,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for lbl, val in footer_stack:
             ws.row_dimensions[curr_row].height = 30
             c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
-            c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_BOLD # (2) Value Bold
+            c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_BOLD
             
             t, b, l, r = BS_THIN, BS_THIN, BS_MEDIUM, BS_THIN
             if lbl == "Grand Total": b = BS_MEDIUM 
@@ -641,7 +645,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
-                # (1) Whole row bottom medium border
+                # Fix: Use 'lbl' variable from loop to trigger this block
                 for c_idx in range(1, total_cols + 1):
                     set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
 
@@ -663,7 +667,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start, sig_col_start).value = "乙 方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
-        # Client Name: Row+1, Col+1
         ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
@@ -770,9 +773,11 @@ def main():
                     else: st.error("密碼錯誤")
             else:
                 st.success("✅ 目前狀態：主管模式"); 
-                if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
+                if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
+            st.markdown("---")
+            if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.12 Shenghuo Bold)")
+        st.title("📺 媒體 Cue 表生成器 (v111.13 Shenghuo Row/Font)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
