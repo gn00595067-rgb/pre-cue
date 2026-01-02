@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.24 (Bolin Logo Align)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.24 (Bolin Fix)")
 
 import pandas as pd
 import math
@@ -268,8 +268,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     import openpyxl
     from openpyxl.utils import get_column_letter, column_index_from_string
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
-    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
-    from openpyxl.utils.units import pixels_to_EMU
 
     SIDE_THIN = Side(style=BS_THIN); SIDE_MEDIUM = Side(style=BS_MEDIUM); SIDE_HAIR = Side(style=BS_HAIR)
     BORDER_ALL_THIN = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
@@ -660,7 +658,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
-                # Fix: Use 'lbl' variable from loop to trigger this block
                 for c_idx in range(1, total_cols + 1):
                     set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
 
@@ -716,6 +713,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35}
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
         
+        # 2. Bolin Header Logic (v111.16)
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
         c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
@@ -726,23 +724,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 scale = 130 / img.height
                 img.height = 130
                 img.width = int(img.width * scale)
-                
-                # Anchor to second to last column, with offset to align right
-                # Easier heuristic for openpyxl without EMU math: anchor to total_cols-1 (List Price Col)
-                # But use a TwoCellAnchor is hard in high level.
-                # Just place it in the wide List Price column (total_cols - 1)
-                col_letter = get_column_letter(total_cols - 1) 
-                
-                # Try to offset using AnchorMarker requires lower level.
-                # Standard add_image puts top-left at cell.
-                # To align right, we anchor to the last column (total_cols) and hope?
-                # No, standard anchoring is top-left.
-                # Let's put it in the List Price column (it's wide) and let it be there.
-                # Visual alignment to right border needs manual adjustment if standard anchoring used.
-                # We place it at 'total_cols - 1' (List Price col) row 1.
-                # To nudge it right, we can use a different anchor point if we knew the pixel offset.
-                # For this snippet, we stick to cell anchor.
-                img.anchor = f"{col_letter}1" 
+                col_letter = get_column_letter(total_cols - 1)
+                img.anchor = f"{col_letter}1"
                 ws.add_image(img)
             except Exception: pass
 
@@ -873,6 +856,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if data[0].get('is_pkg_member'): ws.merge_cells(start_row=start_merge, start_column=end_c_start+2, end_row=curr_row-1, end_column=end_c_start+2)
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
 
+        # Total Row
         ws.row_dimensions[curr_row].height = 40
         ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER; ws.cell(curr_row, 3).alignment = ALIGN_CENTER; ws.cell(curr_row, 3).font = FONT_BOLD
         ws.cell(curr_row, 5, "Total").alignment = ALIGN_CENTER; ws.cell(curr_row, 5).font = FONT_BOLD
@@ -888,6 +872,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
         curr_row += 1
 
+        # Footer
         vat = int(budget * 0.05); grand_total = budget + vat
         footer_stack = [("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
         for lbl, val in footer_stack:
@@ -922,13 +907,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer, sig_col_start).value = "乙      方："
         ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        # (2) Party B is Client (v111.23 Fix)
+        # (2) Party B is Client
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
         ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："
         ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank (v111.23 Fix)
+        # (2) Tax ID Blank
         ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
