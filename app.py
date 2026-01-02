@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.26 (Bolin Critical Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Stable Fix)")
 
 import pandas as pd
 import math
@@ -264,7 +264,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # =========================================================
 
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
-def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
+def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost, logo_bytes=None):
     import openpyxl
     from openpyxl.utils import get_column_letter, column_index_from_string
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
@@ -637,7 +637,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-        
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
         
         curr_row += 1
@@ -693,7 +692,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.25 Bolin Final Fix)
+    # Render Logic: Bolin (v111.23 Bolin Final Fix)
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, logo_bytes=None):
         SIDE_DOUBLE = Side(style='double')
@@ -718,7 +717,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
         c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
-        # (1) Logo (v111.25 Alignment Fix)
+        # (1) Logo
         if logo_bytes:
             try:
                 img = openpyxl.drawing.image.Image(io.BytesIO(logo_bytes))
@@ -726,7 +725,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 img.height = 130
                 img.width = int(img.width * scale)
                 
-                col_letter = get_column_letter(total_cols) # Anchor to last col (Net Price)
+                col_letter = get_column_letter(total_cols + 1) # Right Align Trick (Anchor to Next Col)
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
@@ -910,13 +909,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer, sig_col_start).value = "乙      方："
         ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        # (2) Party B is Client
+        # (2) Party B is Client (v111.23 Fix)
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
         ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："
         ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank
+        # (2) Tax ID Blank (v111.23 Fix)
         ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
@@ -935,7 +934,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     
     if format_type == "Dongwu": render_dongwu_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
     elif format_type == "Shenghuo": render_shenghuo_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
-    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost, logo_bytes=None) # Logo handled internally in func
+    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost, logo_bytes=None) 
 
     out = io.BytesIO(); wb.save(out); return out.getvalue()
 
