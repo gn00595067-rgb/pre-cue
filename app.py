@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.24 (Bolin Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.24 (Bolin Fix & Logo)")
 
 import pandas as pd
 import math
@@ -658,6 +658,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
+                # Fix: Use 'lbl' variable from loop to trigger this block
                 for c_idx in range(1, total_cols + 1):
                     set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
 
@@ -691,7 +692,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.23 Bolin Final)
+    # Render Logic: Bolin (v111.24 Bolin Final Fix)
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, logo_bytes=None):
         SIDE_DOUBLE = Side(style='double')
@@ -724,8 +725,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 scale = 130 / img.height
                 img.height = 130
                 img.width = int(img.width * scale)
-                col_letter = get_column_letter(total_cols - 1)
-                img.anchor = f"{col_letter}1"
+                col_letter = get_column_letter(total_cols) # Anchor to last col (Net Price)
+                img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
 
@@ -907,13 +908,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer, sig_col_start).value = "乙      方："
         ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        # (2) Party B is Client
+        # (2) Party B is Client (v111.23 Fix)
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
         ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："
         ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank
+        # (2) Tax ID Blank (v111.23 Fix)
         ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
