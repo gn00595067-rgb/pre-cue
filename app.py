@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.22 (Bolin Footer Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Bolin Logo)")
 
 import pandas as pd
 import math
@@ -251,7 +251,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # =========================================================
 
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
-def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
+def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost, logo_bytes=None):
     import openpyxl
     from openpyxl.utils import get_column_letter, column_index_from_string
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
@@ -645,9 +645,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
-                for c_idx in range(1, total_cols + 1):
-                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-
+                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
             curr_row += 1
         
         curr_row += 1
@@ -678,10 +676,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.22 Bolin Footer Fix)
+    # Render Logic: Bolin (v111.23 Bolin Logo)
     # -------------------------------------------------------------
-    def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod):
-        SIDE_DOUBLE = Side(style='double') # Define double line style
+    def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, logo_bytes=None):
+        SIDE_DOUBLE = Side(style='double')
         
         # 1. Inherit Logic from Shenghuo (Copy & Adapt)
         eff_days = (end_dt - start_dt).days + 1
@@ -703,13 +701,28 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
         c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
+        # Logo handling (v111.23)
+        if logo_bytes:
+            try:
+                img = openpyxl.drawing.image.Image(io.BytesIO(logo_bytes))
+                scale = 120 / img.height
+                img.height = 120
+                img.width = int(img.width * scale)
+                col_letter = get_column_letter(total_cols - 1) # Anchor to "List Price" Col (wide)
+                img.anchor = f"{col_letter}1"
+                ws.add_image(img)
+            except Exception:
+                pass
+
+        # Row 2: TO (Red) - All cells Bold
         c2a = ws['A2']; c2a.value = "TO："; c2a.font = Font(name=FONT_MAIN, size=20, bold=True, color="FF0000"); c2a.alignment = ALIGN_LEFT
         ws.merge_cells(f"B2:{get_column_letter(total_cols)}2"); c2b = ws['B2']; c2b.value = client_name; c2b.font = Font(name=FONT_MAIN, size=20, bold=True, color="FF0000"); c2b.alignment = ALIGN_LEFT
         
+        # Row 3: FROM - All cells Bold
         c3a = ws['A3']; c3a.value = "FROM："; c3a.font = Font(name=FONT_MAIN, size=20, bold=True); c3a.alignment = ALIGN_LEFT
         ws.merge_cells(f"B3:{get_column_letter(total_cols)}3"); c3b = ws['B3']; c3b.value = "鉑霖行動行銷 許雅婷 TINA"; c3b.font = Font(name=FONT_MAIN, size=20, bold=True); c3b.alignment = ALIGN_LEFT
 
-        # Row 4 (Modified v111.17: Font 14)
+        # Row 4: Client / Spec / Period (Bold)
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
         
@@ -742,8 +755,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             t, b, l, r = BS_MEDIUM, BS_MEDIUM, None, None
             if c_idx == 1: l = BS_MEDIUM 
             if c_idx == total_cols: r = BS_MEDIUM 
-            # (1) F5 (Col 6) Left Border Remove Fix: If col is 6, left=None.
-            # Fix: Explicitly remove left border for Col 6 (F)
             if c_idx == 6: l = None 
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
@@ -764,12 +775,16 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         curr = start_dt
         for i in range(eff_days):
             col_idx = 6 + i
+            # (1) Row 6: Date Number
             c6 = ws.cell(header_start_row, col_idx); c6.value = curr.day; c6.font = FONT_BOLD; c6.alignment = ALIGN_CENTER; c6.border = BORDER_ALL_MEDIUM
             c6.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+
+            # (1) Row 7: Weekday
             c7 = ws.cell(header_start_row+1, col_idx); c7.value = ["日","一","二","三","四","五","六"][(curr.weekday()+1)%7]
             c7.font = FONT_BOLD; c7.alignment = ALIGN_CENTER
             c7.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if curr.weekday() >= 5: c7.fill = FILL_WEEKEND
+            
             curr += timedelta(days=1)
 
         end_headers = ["檔次", "定價", "專案價"]
@@ -830,6 +845,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 pkg = r['pkg_display']
                 if r.get('is_pkg_member'): pkg = r['nat_pkg_display'] if idx == 0 else None
                 ws.cell(curr_row, end_c_start+2, pkg).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).alignment = ALIGN_CENTER
+
                 for c_idx in range(1, total_cols + 1):
                     c = ws.cell(curr_row, c_idx); c.font = FONT_STD; c.border = BORDER_ALL_THIN
                 set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
@@ -871,8 +887,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
             curr_row += 1
         
-        # (2) Footer Re-layout
         curr_row += 1
+        
+        # (2) Footer Re-layout
         start_footer = curr_row
         
         # Remarks (Left)
@@ -918,7 +935,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     
     if format_type == "Dongwu": render_dongwu_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
     elif format_type == "Shenghuo": render_shenghuo_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
-    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
+    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost, logo_bytes)
 
     out = io.BytesIO(); wb.save(out); return out.getvalue()
 
@@ -944,6 +961,7 @@ def main():
                 st.success("✅ 目前狀態：主管模式"); 
                 if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
             st.markdown("---")
+            logo_file = st.file_uploader("上傳 Logo (僅柏霖樣板)", type=["png", "jpg", "jpeg"])
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
         st.title("📺 媒體 Cue 表生成器 (v111.22 Bolin Footer Fix)")
@@ -1083,7 +1101,8 @@ def main():
             st.subheader("📥 檔案下載區")
             
             # --- 直覺式下載 ---
-            xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
+            logo_bytes = logo_file.getvalue() if logo_file else None
+            xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost, logo_bytes)
             
             col_dl1, col_dl2 = st.columns(2)
             
