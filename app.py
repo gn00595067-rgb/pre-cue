@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.24 (Bolin Fix & Logo)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.25 (Bolin Error Fix)")
 
 import pandas as pd
 import math
@@ -618,7 +618,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
 
-        # --- Total Row ---
         ws.row_dimensions[curr_row].height = 40
         ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER; ws.cell(curr_row, 3).alignment = ALIGN_CENTER; ws.cell(curr_row, 3).font = FONT_BOLD
         ws.cell(curr_row, 5, "Total").alignment = ALIGN_CENTER; ws.cell(curr_row, 5).font = FONT_BOLD
@@ -637,6 +636,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+        
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
         
         curr_row += 1
@@ -815,6 +815,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
 
+        # 4. Data Rows
         curr_row = header_start_row + 2
         grouped_data = {"全家廣播": sorted([r for r in rows if r["media"]=="全家廣播"], key=lambda x:x['seconds']),
                         "新鮮視": sorted([r for r in rows if r["media"]=="新鮮視"], key=lambda x:x['seconds']),
@@ -908,13 +909,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer, sig_col_start).value = "乙      方："
         ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        # (2) Party B is Client (v111.23 Fix)
+        # (2) Party B is Client
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
         ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："
         ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank (v111.23 Fix)
+        # (2) Tax ID Blank
         ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
