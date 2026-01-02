@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.11 (Shenghuo Final Touch)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.12 (Shenghuo Bold)")
 
 import pandas as pd
 import math
@@ -296,10 +296,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         spots_col_idx = 7 + eff_days + 1
         total_cols = spots_col_idx
 
-        # 1. Layout
         COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
         ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
-        
         for k, v in COL_WIDTHS.items(): ws.column_dimensions[k].width = v
         for i in range(eff_days): ws.column_dimensions[get_column_letter(8+i)].width = 8.5
         ws.column_dimensions[get_column_letter(spots_col_idx)].width = 13.0
@@ -453,14 +451,14 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Shenghuo (v111.11 Final Touch)
+    # Render Logic: Shenghuo (v111.12 Bold Footer)
     # -------------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
         total_cols = end_c_start + 2
 
-        ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 13.0
+        ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0 # (1) E Width 15.0
         for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1 
         ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5 
         ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0 
@@ -480,14 +478,12 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
         info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}"
         
-        # Row 5 Left: A to Spot Col
         mid_split_col = end_c_start
         ws.merge_cells(f"A5:{get_column_letter(mid_split_col)}5")
         c5 = ws['A5']; c5.value = info_text; c5.font = FONT_STD; c5.alignment = ALIGN_LEFT 
         
-        # Row 5 Right: List Price (Period)
         ws.merge_cells(f"{get_column_letter(end_c_start+1)}5:{get_column_letter(total_cols)}5")
-        c5_r = ws[f"{get_column_letter(end_c_start+1)}5"]; c5_r.value = period_str; c5_r.font = FONT_STD; c5_r.alignment = ALIGN_LEFT # (2) Moved to List Price, formatted cleanly
+        c5_r = ws[f"{get_column_letter(end_c_start+1)}5"]; c5_r.value = period_str; c5_r.font = FONT_STD; c5_r.alignment = ALIGN_LEFT 
         
         draw_outer_border_fast(ws, 5, 5, 1, total_cols)
 
@@ -632,7 +628,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for lbl, val in footer_stack:
             ws.row_dimensions[curr_row].height = 30
             c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
-            c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_STD
+            c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_BOLD # (2) Value Bold
             
             t, b, l, r = BS_THIN, BS_THIN, BS_MEDIUM, BS_THIN
             if lbl == "Grand Total": b = BS_MEDIUM 
@@ -642,13 +638,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if lbl == "Grand Total": b = BS_MEDIUM 
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
-            # (3) Grand Total Row Bottom Border (for ALL cols in that row)
-            if lbl == "Grand Total":
-                # The loop above handled the footer cells, but user wants WHOLE row A-End
-                # Apply bottom medium to 1..end_c_start (empty space) as well
-                for c_idx in range(1, end_c_start + 1):
-                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-
             curr_row += 1
         
         curr_row += 1
@@ -662,22 +651,14 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if is_blue: color = "0000FF"
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
-        # (5) Signature - Parallel to Remarks
-        # Shift down 1 row relative to Remarks start
         sig_start = curr_row - len(remarks_list)
-        
         sig_col_start = max(1, total_cols - 8)
-        
         ws.cell(sig_start, sig_col_start).value = "乙 方："
-        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) # Font 16
-        
-        # Client Name: Row+1, Col+1 (Right one column)
+        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
-        
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
@@ -782,7 +763,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.11 Shenghuo Final Touch)")
+        st.title("📺 媒體 Cue 表生成器 (v111.12 Shenghuo Bold)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
