@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.5 (Shenghuo Header)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.6 (Shenghuo Total)")
 
 import pandas as pd
 import math
@@ -453,7 +453,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Shenghuo (v111.5 Header Polish)
+    # Render Logic: Shenghuo (v111.6 Total Row Polish)
     # -------------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -461,7 +461,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         total_cols = end_c_start + 2
 
         ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 13.0
-        for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 5 
+        # v111.6 Fix: Column Width 8.1 for dates
+        for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1 
         ws.column_dimensions[get_column_letter(end_c_start)].width = 8.0 
         ws.column_dimensions[get_column_letter(end_c_start+1)].width = 15.0 
         ws.column_dimensions[get_column_letter(end_c_start+2)].width = 15.0 
@@ -475,29 +476,26 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws['A3'] = "聲活數位科技股份有限公司 統編 28710100"; ws['A3'].font = FONT_STD
         ws['A4'] = "蔡伊閔"; ws['A4'].font = FONT_STD
         
-        # Row 5 (Split Layout)
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
-        space_gap = "　" * 10 # Using full-width spaces for better visual gap in Excel
+        space_gap = "　" * 10
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
+        info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}{space_gap}執行期間：{period_str}"
         
-        # Combine Client & Spec (Left Side)
-        left_info = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}"
-        # Merge A5 to (End - 3 cols)
-        mid_split_col = end_c_start - 1
-        ws.merge_cells(f"A5:{get_column_letter(mid_split_col)}5")
-        c5_left = ws['A5']; c5_left.value = left_info; c5_left.font = FONT_STD; c5_left.alignment = ALIGN_LEFT
-        
-        # Merge (End - 2 cols) to End for Period (Right Side)
-        ws.merge_cells(f"{get_column_letter(mid_split_col+1)}5:{get_column_letter(total_cols)}5")
-        c5_right = ws[f"{get_column_letter(mid_split_col+1)}5"]; c5_right.value = period_str; c5_right.font = FONT_STD; c5_right.alignment = ALIGN_RIGHT
-        
-        draw_outer_border_fast(ws, 5, 5, 1, total_cols) # Medium Box Row 5
+        ws.merge_cells(f"A5:{get_column_letter(total_cols)}5")
+        c5 = ws['A5']; c5.value = info_text; c5.font = FONT_STD; c5.alignment = ALIGN_LEFT
+        draw_outer_border_fast(ws, 5, 5, 1, total_cols)
 
-        # Row 6 (Left Aligned Polish + Months)
-        # Ad Name (Left)
-        ws.merge_cells(f"A6:E6"); c6 = ws['A6']; c6.value = f"廣告名稱：{product_name}"; c6.font = FONT_STD; c6.alignment = ALIGN_LEFT
+        ws.merge_cells(f"A6:{get_column_letter(total_cols)}6")
+        c6 = ws['A6']; c6.value = f"廣告名稱：{product_name}"; c6.font = FONT_STD; c6.alignment = ALIGN_LEFT
+        draw_outer_border_fast(ws, 6, 6, 1, total_cols)
         
-        # Months (Right side over dates)
+        headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
+        for i, h in enumerate(headers):
+            c_idx = i + 1
+            ws.merge_cells(start_row=7, start_column=c_idx, end_row=8, end_column=c_idx)
+            c = ws.cell(7, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
+            ws.cell(8, c_idx).border = BORDER_ALL_MEDIUM 
+
         curr = start_dt
         month_groups = []
         for i in range(eff_days):
@@ -508,56 +506,48 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         for m_key, s_idx, e_idx in month_groups:
             start_col = 6 + s_idx; end_col = 6 + e_idx
-            ws.merge_cells(start_row=6, start_column=start_col, end_row=6, end_column=end_col)
-            c = ws.cell(6, start_col); c.value = f"{m_key[1]}月"; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
-            # Inner thin borders for months? Usually standard grid.
-            for c_i in range(start_col, end_col+1): ws.cell(6, c_i).border = BORDER_ALL_THIN
-        
-        draw_outer_border_fast(ws, 6, 6, 1, total_cols) # Medium Box Row 6
-        
-        # Row 7 & 8 Setup
-        # Fixed Headers (A-E)
-        headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
-        for i, h in enumerate(headers):
-            c_idx = i + 1
-            ws.merge_cells(start_row=7, start_column=c_idx, end_row=8, end_column=c_idx)
-            c = ws.cell(7, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
-            # Gridline Polish: Top Medium, Left/Right Medium ONLY if edge
-            t = SIDE_MEDIUM; b = SIDE_THIN; l = SIDE_THIN; r = SIDE_THIN
-            if c_idx == 1: l = SIDE_MEDIUM
-            c.border = Border(top=t, bottom=b, left=l, right=r)
-            ws.cell(8, c_idx).border = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=l, right=r)
+            ws.merge_cells(start_row=7, start_column=start_col, end_row=7, end_column=end_col)
+            c = ws.cell(7, start_col); c.value = f"{m_key[1]}月"; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
+            for c_i in range(start_col, end_col+1): set_border(ws.cell(7, c_i), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
+            set_border(ws.cell(7, start_col), left=BS_MEDIUM); set_border(ws.cell(7, end_col), right=BS_MEDIUM)
 
-        # Date & Weekday
         curr = start_dt
         for i in range(eff_days):
             col_idx = 6 + i
-            # Row 7: Date Num
-            c7 = ws.cell(7, col_idx); c7.value = curr.day; c7.font = FONT_BOLD; c7.alignment = ALIGN_CENTER
-            c7.border = Border(top=SIDE_MEDIUM, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
-            # Row 8: Weekday
-            c8 = ws.cell(8, col_idx); c8.value = ["日","一","二","三","四","五","六"][(curr.weekday()+1)%7]
-            c8.font = FONT_BOLD; c8.alignment = ALIGN_CENTER
-            c8.border = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
-            if curr.weekday() >= 5: c8.fill = FILL_WEEKEND
+            c = ws.cell(8, col_idx); c.value = curr.day; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
+            if curr.weekday() >= 5: c.fill = FILL_WEEKEND
             curr += timedelta(days=1)
 
-        # End Headers
         end_headers = ["檔次", "定價", "專案價"]
         for i, h in enumerate(end_headers):
             c_idx = end_c_start + i
             ws.merge_cells(start_row=7, start_column=c_idx, end_row=8, end_column=c_idx)
-            c = ws.cell(7, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
-            t = SIDE_MEDIUM; b = SIDE_THIN; l = SIDE_THIN; r = SIDE_THIN
-            if c_idx == total_cols: r = SIDE_MEDIUM
-            c.border = Border(top=t, bottom=b, left=l, right=r)
-            ws.cell(8, c_idx).border = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=l, right=r)
+            c = ws.cell(7, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
+            ws.cell(8, c_idx).border = BORDER_ALL_MEDIUM
+
+        # Fix Borders for Header Block
+        for c_idx in range(1, total_cols + 1):
+            c7 = ws.cell(7, c_idx)
+            t7, b7, l7, r7 = SIDE_MEDIUM, SIDE_THIN, SIDE_THIN, SIDE_THIN
+            if c_idx == 1: l7 = SIDE_MEDIUM
+            if c_idx == total_cols: r7 = SIDE_MEDIUM
+            c7.border = Border(top=t7, bottom=b7, left=l7, right=r7)
+
+            c8 = ws.cell(8, c_idx)
+            t8, b8, l8, r8 = SIDE_THIN, SIDE_THIN, SIDE_THIN, SIDE_THIN
+            if c_idx == 1: l8 = SIDE_MEDIUM
+            if c_idx == total_cols: r8 = SIDE_MEDIUM
+            c8.border = Border(top=t8, bottom=b8, left=l8, right=r8)
 
         curr_row = 9
         grouped_data = {"全家廣播": sorted([r for r in rows if r["media"]=="全家廣播"], key=lambda x:x['seconds']),
                         "新鮮視": sorted([r for r in rows if r["media"]=="新鮮視"], key=lambda x:x['seconds']),
                         "家樂福": sorted([r for r in rows if r["media"]=="家樂福"], key=lambda x:x['seconds'])}
         
+        # Accumulators for v111.6 Total Row
+        total_store_count = 0
+        total_list_sum = 0
+
         for m_key, data in grouped_data.items():
             if not data: continue
             start_merge = curr_row
@@ -568,18 +558,19 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 ws.cell(curr_row, 1, d_name).alignment = ALIGN_CENTER
                 ws.cell(curr_row, 2, r['region']).alignment = ALIGN_CENTER
                 
-                # Store Suffix Fix (v111.4)
+                # Acc
                 p_num = int(r.get('program_num', 0))
+                total_store_count += p_num # Simple sum, note: unit mixing (stores/faces) is accepted per logic
+                
                 suffix = "面" if m_key == "新鮮視" else "店"
                 ws.cell(curr_row, 3, f"{p_num:,}{suffix}").alignment = ALIGN_CENTER
                 
                 ws.cell(curr_row, 4, r['daypart']).alignment = ALIGN_CENTER
                 
-                # Spec Format Fix (v111.4)
                 sec = r['seconds']
                 if m_key == "新鮮視": sec_txt = f"{sec}秒\n影片/影像 1920x1080 (mp4)"
                 else: sec_txt = f"{sec}秒廣告"
-                c_spec = ws.cell(curr_row, 5, sec_txt); c_spec.alignment = ALIGN_CENTER; c_spec.font = Font(name=FONT_MAIN, size=10) # Smaller font for long text
+                c_spec = ws.cell(curr_row, 5, sec_txt); c_spec.alignment = ALIGN_CENTER; c_spec.font = Font(name=FONT_MAIN, size=10)
                 
                 row_sum = 0
                 for d_idx in range(eff_days):
@@ -588,7 +579,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                         c = ws.cell(curr_row, 6+d_idx); c.value = val; c.alignment = ALIGN_CENTER; c.font = FONT_STD; c.border = BORDER_ALL_THIN
                 
                 ws.cell(curr_row, end_c_start, row_sum).alignment = ALIGN_CENTER
-                ws.cell(curr_row, end_c_start+1, r['rate_display']).number_format = FMT_MONEY
+                
+                rate_val = r['rate_display']
+                if isinstance(rate_val, (int, float)): total_list_sum += rate_val
+                ws.cell(curr_row, end_c_start+1, rate_val).number_format = FMT_MONEY
                 
                 pkg = r['pkg_display']
                 if r.get('is_pkg_member'): pkg = r['nat_pkg_display'] if idx == 0 else None
@@ -605,13 +599,35 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
 
+        # --- v111.6 Total Row Implementation ---
         ws.row_dimensions[curr_row].height = 40
-        ws.cell(curr_row, end_c_start, sum([sum(r['schedule']) for r in rows])).alignment = ALIGN_CENTER 
-        ws.cell(curr_row, end_c_start+1, "Total").alignment = ALIGN_RIGHT
-        ws.cell(curr_row, end_c_start+2, budget).number_format = FMT_MONEY
         
+        # 1. Store Count Total (Col 3)
+        ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER
+        ws.cell(curr_row, 3).alignment = ALIGN_CENTER; ws.cell(curr_row, 3).font = FONT_BOLD
+        
+        # 2. "Total" Text (Col 5)
+        ws.cell(curr_row, 5, "Total").alignment = ALIGN_CENTER; ws.cell(curr_row, 5).font = FONT_BOLD
+        
+        # 3. Daily Spots Total (Col 6 ~ end_c_start-1)
+        for d_idx in range(eff_days):
+            col_idx = 6 + d_idx
+            daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
+            c = ws.cell(curr_row, col_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD # Bold for totals? Usually yes.
+        
+        # 4. Total Spots (Col end_c_start)
+        ws.cell(curr_row, end_c_start, sum([sum(r['schedule']) for r in rows])).alignment = ALIGN_CENTER; ws.cell(curr_row, end_c_start).font = FONT_BOLD
+        
+        # 5. List Price Total (Col end_c_start+1)
+        ws.cell(curr_row, end_c_start+1, total_list_sum).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).font = FONT_BOLD
+        
+        # 6. Budget Total (Col end_c_start+2)
+        ws.cell(curr_row, end_c_start+2, budget).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).font = FONT_BOLD
+        
+        # Borders for Total Row
         for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
+        
         curr_row += 1
 
         vat = int(budget * 0.05); grand_total = budget + vat
@@ -631,12 +647,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         curr_row += 2
         sig_start = curr_row
-        
         sig_col_start = max(1, total_cols - 6)
         ws.cell(sig_start, sig_col_start).value = f"乙 方：{client_name}"
         ws.cell(sig_start+1, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).value = "客戶簽章："
-        
         for i in range(3):
             c = ws.cell(sig_start+i, sig_col_start)
             c.font = FONT_STD
@@ -742,7 +756,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.5 Shenghuo Header)")
+        st.title("📺 媒體 Cue 表生成器 (v111.6 Shenghuo Total)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
