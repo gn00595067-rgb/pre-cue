@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.10 (Shenghuo Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.11 (Shenghuo Final Touch)")
 
 import pandas as pd
 import math
@@ -453,7 +453,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Shenghuo (v111.10 Final Polish)
+    # Render Logic: Shenghuo (v111.11 Final Touch)
     # -------------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -472,17 +472,23 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']; c1.value = "聲活數位-媒體計劃排程表"; c1.font = Font(name=FONT_MAIN, size=24, bold=True); c1.alignment = ALIGN_CENTER
         ws.merge_cells(f"A2:{get_column_letter(total_cols)}2"); c2 = ws['A2']; c2.value = "Media Schedule"; c2.font = Font(name=FONT_MAIN, size=18, bold=True); c2.alignment = ALIGN_CENTER
         
-        # (1) A3/A4 Left Align
         ws.merge_cells(f"A3:{get_column_letter(total_cols)}3"); ws['A3'].value = "聲活數位科技股份有限公司 統編 28710100"; ws['A3'].font = FONT_STD; ws['A3'].alignment = ALIGN_LEFT
         ws.merge_cells(f"A4:{get_column_letter(total_cols)}4"); ws['A4'].value = "蔡伊閔"; ws['A4'].font = FONT_STD; ws['A4'].alignment = ALIGN_LEFT
         
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
         space_gap = "　" * 10
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
-        info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}{space_gap}執行期間：{period_str}"
+        info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}"
         
-        ws.merge_cells(f"A5:{get_column_letter(total_cols)}5")
+        # Row 5 Left: A to Spot Col
+        mid_split_col = end_c_start
+        ws.merge_cells(f"A5:{get_column_letter(mid_split_col)}5")
         c5 = ws['A5']; c5.value = info_text; c5.font = FONT_STD; c5.alignment = ALIGN_LEFT 
+        
+        # Row 5 Right: List Price (Period)
+        ws.merge_cells(f"{get_column_letter(end_c_start+1)}5:{get_column_letter(total_cols)}5")
+        c5_r = ws[f"{get_column_letter(end_c_start+1)}5"]; c5_r.value = period_str; c5_r.font = FONT_STD; c5_r.alignment = ALIGN_LEFT # (2) Moved to List Price, formatted cleanly
+        
         draw_outer_border_fast(ws, 5, 5, 1, total_cols)
 
         ws.merge_cells(f"A6:{get_column_letter(total_cols)}6")
@@ -530,7 +536,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             ws.cell(8, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
 
-        # Fix Header Block Inner Borders
         date_start_col = 6
         for c_idx in range(date_start_col, total_cols + 1):
             c7 = ws.cell(7, c_idx)
@@ -599,7 +604,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
 
-        # --- Total Row ---
         ws.row_dimensions[curr_row].height = 40
         ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER; ws.cell(curr_row, 3).alignment = ALIGN_CENTER; ws.cell(curr_row, 3).font = FONT_BOLD
         ws.cell(curr_row, 5, "Total").alignment = ALIGN_CENTER; ws.cell(curr_row, 5).font = FONT_BOLD
@@ -617,10 +621,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
-        # (2) Grand total row (A to End) bottom medium border
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-        
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
+        
         curr_row += 1
 
         vat = int(budget * 0.05); grand_total = budget + vat
@@ -639,14 +642,19 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if lbl == "Grand Total": b = BS_MEDIUM 
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
+            # (3) Grand Total Row Bottom Border (for ALL cols in that row)
+            if lbl == "Grand Total":
+                # The loop above handled the footer cells, but user wants WHOLE row A-End
+                # Apply bottom medium to 1..end_c_start (empty space) as well
+                for c_idx in range(1, end_c_start + 1):
+                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+
             curr_row += 1
         
         curr_row += 1
-        # (6) Font Size 16 for Remarks
         ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True)
         for rm in remarks_list:
             curr_row += 1
-            # (8) Colors
             is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
             is_blue = rm.strip().startswith("6.")
             color = "000000"
@@ -654,28 +662,24 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if is_blue: color = "0000FF"
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
-        # (4) Signature Parallel to Remarks
-        # Move up to align with Remarks
-        sig_start = curr_row - len(remarks_list) - 1 # Start at "Remarks:" line
+        # (5) Signature - Parallel to Remarks
+        # Shift down 1 row relative to Remarks start
+        sig_start = curr_row - len(remarks_list)
         
-        # Align signature to right side (e.g., last 8 cols)
         sig_col_start = max(1, total_cols - 8)
         
-        # Row 1 (Aligned with Remarks Header)
         ws.cell(sig_start, sig_col_start).value = "乙 方："
-        ws.cell(sig_start, sig_col_start).font = FONT_STD
+        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) # Font 16
         
-        # Row 2 (Aligned with Remark 1)
-        ws.cell(sig_start+1, sig_col_start).value = f"{client_name}"
-        ws.cell(sig_start+1, sig_col_start).font = FONT_STD
+        # Client Name: Row+1, Col+1 (Right one column)
+        ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
+        ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
-        # Row 3 (Aligned with Remark 2)
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
-        ws.cell(sig_start+2, sig_col_start).font = FONT_STD
+        ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        # Row 4 (Aligned with Remark 3)
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
-        ws.cell(sig_start+3, sig_col_start).font = FONT_STD
+        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         return curr_row + 3
 
@@ -778,7 +782,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.10 Shenghuo Parallel)")
+        st.title("📺 媒體 Cue 表生成器 (v111.11 Shenghuo Final Touch)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
