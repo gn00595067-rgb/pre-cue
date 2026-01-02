@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.8 (Shenghuo Final)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.9 (Shenghuo Fix)")
 
 import pandas as pd
 import math
@@ -451,7 +451,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Shenghuo (v111.8 Final)
+    # Render Logic: Shenghuo (v111.8 Final Polish)
     # -------------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -460,9 +460,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 13.0
         for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1 
-        ws.column_dimensions[get_column_letter(end_c_start)].width = 8.1 # (2) Spots 8.1
+        ws.column_dimensions[get_column_letter(end_c_start)].width = 8.1 
         ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0 
-        ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0 # (2) Net Price 20
+        ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0 
         
         ROW_H_MAP = {1:30, 2:30, 3:25, 4:25, 5:25, 6:25, 7:35, 8:35}
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
@@ -537,14 +537,14 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c7 = ws.cell(7, c_idx)
             # Default Medium Top, Thin others
             c7.border = Border(top=SIDE_MEDIUM, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
-            if c_idx == date_start_col: set_border(c7, left=SIDE_MEDIUM)
-            if c_idx == total_cols: set_border(c7, right=SIDE_MEDIUM)
+            if c_idx == date_start_col: set_border(c7, left=BS_MEDIUM)
+            if c_idx == total_cols: set_border(c7, right=BS_MEDIUM)
             
             # Row 8 (Days/Bottom Headers)
             c8 = ws.cell(8, c_idx)
             c8.border = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
-            if c_idx == date_start_col: set_border(c8, left=SIDE_MEDIUM)
-            if c_idx == total_cols: set_border(c8, right=SIDE_MEDIUM)
+            if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
+            if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
 
         curr_row = 9
         grouped_data = {"全家廣播": sorted([r for r in rows if r["media"]=="全家廣播"], key=lambda x:x['seconds']),
@@ -594,7 +594,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                     c = ws.cell(curr_row, c_idx); c.font = FONT_STD; c.border = BORDER_ALL_THIN
                 
                 # (4) Col E (5) Right Medium Border
-                set_border(ws.cell(curr_row, 5), right=SIDE_MEDIUM)
+                set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
                 
                 curr_row += 1
             
@@ -622,10 +622,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
         # (5) Grand Total Row Bottom Border (Medium across all)
-        for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=SIDE_MEDIUM)
+        for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
         
         # (4) Col E Right Medium on Total Row
-        set_border(ws.cell(curr_row, 5), right=SIDE_MEDIUM)
+        set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
         
         curr_row += 1
 
