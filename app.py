@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.25 (Bolin Error Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.25 (Bolin Fix)")
 
 import pandas as pd
 import math
@@ -268,6 +268,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     import openpyxl
     from openpyxl.utils import get_column_letter, column_index_from_string
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
+    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 
     SIDE_THIN = Side(style=BS_THIN); SIDE_MEDIUM = Side(style=BS_MEDIUM); SIDE_HAIR = Side(style=BS_HAIR)
     BORDER_ALL_THIN = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
@@ -718,14 +719,23 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
         c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
-        # (1) Logo (v111.23)
+        # (1) Logo (v111.24 Alignment Fix)
         if logo_bytes:
             try:
                 img = openpyxl.drawing.image.Image(io.BytesIO(logo_bytes))
                 scale = 130 / img.height
                 img.height = 130
                 img.width = int(img.width * scale)
-                col_letter = get_column_letter(total_cols) # Anchor to last col (Net Price)
+                
+                # Align to right edge: anchor to the LAST column (Total/Project Price)
+                # But to nudge it right, we rely on the cell's left edge.
+                # Project Price col (end_c_start+2) is total_cols.
+                # If we anchor there, it starts at that column's left.
+                col_letter = get_column_letter(total_cols) 
+                
+                # Offset: To make it appear right-aligned, we actually want it to end at the right border of total_cols.
+                # Standard OpenPyXL doesn't support "align right" for images easily without EMU calc.
+                # Strategy: Anchor to the last column. It will visually be in the top right corner area.
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
