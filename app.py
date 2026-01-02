@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.25 (Bolin Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.26 (Bolin Critical Fix)")
 
 import pandas as pd
 import math
@@ -637,7 +637,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-        
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
         
         curr_row += 1
@@ -715,7 +714,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35}
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
         
-        # 2. Bolin Header Logic (v111.16)
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
         c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
@@ -727,15 +725,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 img.height = 130
                 img.width = int(img.width * scale)
                 
-                # Align to right edge: anchor to the LAST column (Total/Project Price)
-                # But to nudge it right, we rely on the cell's left edge.
-                # Project Price col (end_c_start+2) is total_cols.
-                # If we anchor there, it starts at that column's left.
-                col_letter = get_column_letter(total_cols) 
-                
-                # Offset: To make it appear right-aligned, we actually want it to end at the right border of total_cols.
-                # Standard OpenPyXL doesn't support "align right" for images easily without EMU calc.
-                # Strategy: Anchor to the last column. It will visually be in the top right corner area.
+                col_letter = get_column_letter(total_cols) # Anchor to last col (Net Price)
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
