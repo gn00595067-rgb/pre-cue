@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.13 (Shenghuo Row/Font)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.14 (Bolin Beta)")
 
 import pandas as pd
 import math
@@ -634,7 +634,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for lbl, val in footer_stack:
             ws.row_dimensions[curr_row].height = 30
             c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
-            c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_BOLD
+            c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_BOLD 
             
             t, b, l, r = BS_THIN, BS_THIN, BS_MEDIUM, BS_THIN
             if lbl == "Grand Total": b = BS_MEDIUM 
@@ -645,7 +645,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
-                # Fix: Use 'lbl' variable from loop to trigger this block
+                # (1) Whole row bottom medium border
                 for c_idx in range(1, total_cols + 1):
                     set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
 
@@ -679,70 +679,233 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin
+    # Render Logic: Bolin (v111.14 Bolin Beta)
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod):
-        days_n = (end_dt - start_dt).days + 1; total_cols = 1 + 5 + days_n + 3
-        ws.column_dimensions['A'].width = 2; ws.column_dimensions['B'].width = 20
-        for i in range(days_n): ws.column_dimensions[get_column_letter(7+i)].width = 5
-        ws['B2']="TO："; ws['C2']=client_name; ws['B3']="FROM："; ws['C3']="鉑霖行動行銷 許雅婷 TINA"
-        unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
-        ws['G4']="廣告規格："; ws['H4']=sec_str
+        # 1. Inherit Logic from Shenghuo (Copy & Adapt)
+        eff_days = (end_dt - start_dt).days + 1
+        end_c_start = 6 + eff_days
+        total_cols = end_c_start + 2
+
+        # Column Config (Same as Shenghuo)
+        ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0
+        for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1
+        ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5
+        ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0
+        ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0
         
-        header_fill = FILL_HEADER_BOLIN
-        headers = ["頻道", "播出地區", "播出店數", "播出時間", "規格"]
+        ROW_H_MAP = {1:30, 2:30, 3:46, 4:46, 5:40, 6:40, 7:35, 8:35}
+        for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
+        
+        # 2. Bolin Header Logic
+        # A1 Title
+        ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
+        c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=24, bold=True); c1.alignment = ALIGN_CENTER
+        
+        # Row 2: TO (Red)
+        ws.merge_cells(f"A2:{get_column_letter(total_cols)}2")
+        # Creating a RichText for mixed color is complex in openpyxl, sticking to simple text with Red Color for now (or splitting cells)
+        # To mimic "TO: Client", we can put "TO：" in A2 and Client in B2? But we merged. 
+        # Simpler approach: Just put text, make it Red.
+        c2 = ws['A2']; c2.value = f"TO：  {client_name}"; c2.font = Font(name=FONT_MAIN, size=16, bold=True, color="FF0000"); c2.alignment = ALIGN_LEFT
+        
+        # Row 3: FROM
+        ws.merge_cells(f"A3:{get_column_letter(total_cols)}3")
+        c3 = ws['A3']; c3.value = "FROM：  鉑霖行動行銷 許雅婷 TINA"; c3.font = Font(name=FONT_MAIN, size=16, bold=True); c3.alignment = ALIGN_LEFT
+
+        # Row 4: Client / Spec / Period (Like Shenghuo R5)
+        unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
+        space_gap = "　" * 5
+        period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
+        info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}{space_gap}{period_str}"
+        
+        ws.merge_cells(f"A4:{get_column_letter(total_cols)}4")
+        c4 = ws['A4']; c4.value = info_text; c4.font = Font(name=FONT_MAIN, size=14); c4.alignment = ALIGN_LEFT
+        draw_outer_border_fast(ws, 4, 4, 1, total_cols)
+
+        # Row 5: Ad Name (Like Shenghuo R6)
+        ws.merge_cells(f"A5:{get_column_letter(total_cols)}5")
+        c5 = ws['A5']; c5.value = f"廣告名稱：{product_name}"; c5.font = Font(name=FONT_MAIN, size=14); c5.alignment = ALIGN_LEFT
+        draw_outer_border_fast(ws, 5, 5, 1, total_cols)
+
+        # 3. Table Structure (Months/Dates) - Shifted up by 1 row compared to Shenghuo
+        # Shenghuo starts headers at 7. Bolin starts at 6.
+        # But wait, Bolin header R6 is Month, R7 is Date. 
+        # Shenghuo header R7 is Month/Header, R8 is Date/Header.
+        # Let's map 1:1 with Shenghuo logic but shifted?
+        # Actually Shenghuo R7/R8 IS the header block. Bolin R6/R7 can be the header block.
+        
+        header_start_row = 6
+        
+        headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
         for i, h in enumerate(headers):
-            c = ws.cell(7, 2+i); c.value = h; c.fill = header_fill; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
+            c_idx = i + 1
+            ws.merge_cells(start_row=header_start_row, start_column=c_idx, end_row=header_start_row+1, end_column=c_idx)
+            c = ws.cell(header_start_row, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
+            t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
+            if c_idx == 1: l = BS_MEDIUM
+            c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            ws.cell(header_start_row+1, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
+
+        month_groups = []
+        for i in range(eff_days):
+            d = start_dt + timedelta(days=i); m_key = (d.year, d.month)
+            if not month_groups or month_groups[-1][0] != m_key: month_groups.append([m_key, i, i]) 
+            else: month_groups[-1][2] = i
+        
+        for m_key, s_idx, e_idx in month_groups:
+            start_col = 6 + s_idx; end_col = 6 + e_idx
+            ws.merge_cells(start_row=header_start_row, start_column=start_col, end_row=header_start_row, end_column=end_col)
+            c = ws.cell(header_start_row, start_col); c.value = f"{m_key[1]}月"; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
+            for c_i in range(start_col, end_col+1): set_border(ws.cell(header_start_row, c_i), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
+            set_border(ws.cell(header_start_row, start_col), left=BS_MEDIUM); set_border(ws.cell(header_start_row, end_col), right=BS_MEDIUM)
+
         curr = start_dt
-        for i in range(days_n):
-            c = ws.cell(7, 7+i); c.value = curr; c.number_format = 'm/d'; c.fill = header_fill; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
+        for i in range(eff_days):
+            col_idx = 6 + i
+            c = ws.cell(header_start_row+1, col_idx); c.value = curr.day; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
             if curr.weekday() >= 5: c.fill = FILL_WEEKEND
             curr += timedelta(days=1)
-        end_h = ["總檔次", "單價", "金額"]; end_c_start = 7 + days_n
-        for i, h in enumerate(end_h):
-            c = ws.cell(7, end_c_start+i); c.value = h; c.fill = header_fill; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
 
-        curr_row = 8
+        end_headers = ["檔次", "定價", "專案價"]
+        for i, h in enumerate(end_headers):
+            c_idx = end_c_start + i
+            ws.merge_cells(start_row=header_start_row, start_column=c_idx, end_row=header_start_row+1, end_column=c_idx)
+            c = ws.cell(header_start_row, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
+            t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
+            if c_idx == total_cols: r = BS_MEDIUM
+            c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            ws.cell(header_start_row+1, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
+
+        date_start_col = 6
+        for c_idx in range(date_start_col, total_cols + 1):
+            c7 = ws.cell(header_start_row, c_idx)
+            c7.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+            if c_idx == date_start_col: set_border(c7, left=BS_MEDIUM)
+            if c_idx == total_cols: set_border(c7, right=BS_MEDIUM)
+            c8 = ws.cell(header_start_row+1, c_idx)
+            c8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+            if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
+            if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
+
+        # 4. Data Rows (Same as Shenghuo)
+        curr_row = header_start_row + 2 # Row 8
+        
+        # ... (Copy Data Row Loop from Shenghuo) ...
         grouped_data = {"全家廣播": sorted([r for r in rows if r["media"]=="全家廣播"], key=lambda x:x['seconds']),
                         "新鮮視": sorted([r for r in rows if r["media"]=="新鮮視"], key=lambda x:x['seconds']),
                         "家樂福": sorted([r for r in rows if r["media"]=="家樂福"], key=lambda x:x['seconds'])}
         
+        total_store_count = 0; total_list_sum = 0
         for m_key, data in grouped_data.items():
             if not data: continue
             start_merge = curr_row
-            d_name = f"全家便利商店\n{m_key}" if m_key != "家樂福" else "家樂福"
+            d_name = f"全家便利商店\n{m_key}廣告" if m_key != "家樂福" else "家樂福"
             for idx, r in enumerate(data):
-                ws.row_dimensions[curr_row].height = 25
-                ws.cell(curr_row, 2, d_name).alignment = ALIGN_CENTER
-                ws.cell(curr_row, 3, r['region']).alignment = ALIGN_CENTER
-                ws.cell(curr_row, 4, r.get('program_num',0)).alignment = ALIGN_CENTER
-                ws.cell(curr_row, 5, r['daypart']).alignment = ALIGN_CENTER
-                ws.cell(curr_row, 6, f"{r['seconds']}秒").alignment = ALIGN_CENTER
+                ws.row_dimensions[curr_row].height = 40
+                ws.cell(curr_row, 1, d_name).alignment = ALIGN_CENTER
+                ws.cell(curr_row, 2, r['region']).alignment = ALIGN_CENTER
+                
+                p_num = int(r.get('program_num', 0)); total_store_count += p_num 
+                suffix = "面" if m_key == "新鮮視" else "店"
+                ws.cell(curr_row, 3, f"{p_num:,}{suffix}").alignment = ALIGN_CENTER
+                ws.cell(curr_row, 4, r['daypart']).alignment = ALIGN_CENTER
+                sec = r['seconds']
+                if m_key == "新鮮視": sec_txt = f"{sec}秒\n影片/影像 1920x1080 (mp4)"
+                else: sec_txt = f"{sec}秒廣告"
+                c_spec = ws.cell(curr_row, 5, sec_txt); c_spec.alignment = ALIGN_CENTER; c_spec.font = Font(name=FONT_MAIN, size=10)
+                
                 row_sum = 0
-                for d_idx in range(days_n):
+                for d_idx in range(eff_days):
                     if d_idx < len(r['schedule']):
                         val = r['schedule'][d_idx]; row_sum += val
-                        ws.cell(curr_row, 7+d_idx, val).alignment = ALIGN_CENTER
+                        c = ws.cell(curr_row, 6+d_idx); c.value = val; c.alignment = ALIGN_CENTER; c.font = FONT_STD; c.border = BORDER_ALL_THIN
+                
                 ws.cell(curr_row, end_c_start, row_sum).alignment = ALIGN_CENTER
-                rate = r['rate_display']; pkg = r['pkg_display']
+                rate_val = r['rate_display']
+                if isinstance(rate_val, (int, float)): total_list_sum += rate_val
+                ws.cell(curr_row, end_c_start+1, rate_val).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).alignment = ALIGN_CENTER 
+                pkg = r['pkg_display']
                 if r.get('is_pkg_member'): pkg = r['nat_pkg_display'] if idx == 0 else None
-                ws.cell(curr_row, end_c_start+1, rate).number_format = FMT_MONEY
-                if pkg is not None: ws.cell(curr_row, end_c_start+2, pkg).number_format = FMT_MONEY
-                for c_idx in range(2, total_cols+1):
-                    c = ws.cell(curr_row, c_idx); c.font = FONT_STD; c.border = BORDER_ALL_THIN
-                curr_row += 1
-            ws.merge_cells(start_row=start_merge, start_column=2, end_row=curr_row-1, end_column=2)
-            if data[0].get('is_pkg_member'): ws.merge_cells(start_row=start_merge, start_column=end_c_start+2, end_row=curr_row-1, end_column=end_c_start+2)
-            draw_outer_border_fast(ws, start_merge, curr_row-1, 2, total_cols)
+                ws.cell(curr_row, end_c_start+2, pkg).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).alignment = ALIGN_CENTER
 
-        ws.row_dimensions[curr_row].height = 30
-        ws.cell(curr_row, end_c_start+1, "Total").alignment = ALIGN_RIGHT
-        ws.cell(curr_row, end_c_start+2, budget + int(budget*0.05)).number_format = FMT_MONEY
-        draw_outer_border_fast(ws, curr_row, curr_row, 2, total_cols)
-        curr_row += 2
-        ws.cell(curr_row, 9, "Remarks:").font = FONT_BOLD
+                for c_idx in range(1, total_cols + 1):
+                    c = ws.cell(curr_row, c_idx); c.font = FONT_STD; c.border = BORDER_ALL_THIN
+                set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
+                curr_row += 1
+            ws.merge_cells(start_row=start_merge, start_column=1, end_row=curr_row-1, end_column=1)
+            if data[0].get('is_pkg_member'): ws.merge_cells(start_row=start_merge, start_column=end_c_start+2, end_row=curr_row-1, end_column=end_c_start+2)
+            draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
+
+        # Total Row
+        ws.row_dimensions[curr_row].height = 40
+        ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER; ws.cell(curr_row, 3).alignment = ALIGN_CENTER; ws.cell(curr_row, 3).font = FONT_BOLD
+        ws.cell(curr_row, 5, "Total").alignment = ALIGN_CENTER; ws.cell(curr_row, 5).font = FONT_BOLD
+        for d_idx in range(eff_days):
+            daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
+            c = ws.cell(curr_row, 6+d_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD
+        ws.cell(curr_row, end_c_start, sum([sum(r['schedule']) for r in rows])).alignment = ALIGN_CENTER; ws.cell(curr_row, end_c_start).font = FONT_BOLD
+        ws.cell(curr_row, end_c_start+1, total_list_sum).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).font = FONT_BOLD; ws.cell(curr_row, end_c_start+1).alignment = ALIGN_CENTER
+        ws.cell(curr_row, end_c_start+2, budget).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).font = FONT_BOLD; ws.cell(curr_row, end_c_start+2).alignment = ALIGN_CENTER
+        for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
+        draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
+        for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+        set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
+        curr_row += 1
+
+        # Footer
+        vat = int(budget * 0.05); grand_total = budget + vat
+        footer_stack = [("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
+        for lbl, val in footer_stack:
+            ws.row_dimensions[curr_row].height = 30
+            c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
+            c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_BOLD 
+            t, b, l, r = BS_THIN, BS_THIN, BS_MEDIUM, BS_THIN
+            if lbl == "Grand Total": b = BS_MEDIUM 
+            c_l.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            t, b, l, r = BS_THIN, BS_THIN, BS_THIN, BS_MEDIUM
+            if lbl == "Grand Total": b = BS_MEDIUM 
+            c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            if lbl == "Grand Total":
+                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+            curr_row += 1
+        
+        # Remarks
+        curr_row += 1
+        ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True)
         for rm in remarks_list:
-            curr_row += 1; ws.cell(curr_row, 9, rm).font = FONT_STD
+            curr_row += 1
+            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
+            is_blue = rm.strip().startswith("6.")
+            color = "000000"
+            if is_red: color = "FF0000"
+            if is_blue: color = "0000FF"
+            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+
+        # Signature (Bolin)
+        sig_start = curr_row - len(remarks_list)
+        sig_col_start = max(1, total_cols - 8)
+        
+        # Left Side (Party A) - Bolin
+        ws.merge_cells(start_row=sig_start, start_column=1, end_row=sig_start, end_column=7) 
+        c_l1 = ws.cell(sig_start, 1); c_l1.value = "甲    方：鉑霖整合行銷公關有限公司"; c_l1.font = FONT_STD; c_l1.alignment = ALIGN_LEFT
+        ws.merge_cells(start_row=sig_start+1, start_column=1, end_row=sig_start+1, end_column=7) 
+        c_l2 = ws.cell(sig_start+1, 1); c_l2.value = "統一編號：90450499"; c_l2.font = FONT_STD; c_l2.alignment = ALIGN_LEFT
+        
+        # Right Side (Party B) - Client
+        ws.cell(sig_start, sig_col_start).value = "乙 方："
+        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
+        ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
+        ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+2, sig_col_start).value = "統一編號："
+        ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
+        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        
+        # Top Border for Signature Block
+        for c_idx in range(1, total_cols + 1): set_border(ws.cell(sig_start, c_idx), top=BS_THIN)
+
+        return curr_row + 3
 
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Schedule"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True
@@ -777,7 +940,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.13 Shenghuo Row/Font)")
+        st.title("📺 媒體 Cue 表生成器 (v111.14 Bolin Beta)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
