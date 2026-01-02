@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.21 (Bolin Footer)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.22 (Bolin Footer Fix)")
 
 import pandas as pd
 import math
@@ -623,10 +623,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
-        # (2) Grand total row (A to End) bottom medium border
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-        
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
+        
         curr_row += 1
 
         vat = int(budget * 0.05); grand_total = budget + vat
@@ -646,7 +645,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
-                # Fix: Use 'lbl' variable from loop to trigger this block
                 for c_idx in range(1, total_cols + 1):
                     set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
 
@@ -663,16 +661,11 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if is_blue: color = "0000FF"
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
-        # (5) Signature - Parallel to Remarks
-        # Shift down 1 row relative to Remarks start
         sig_start = curr_row - len(remarks_list)
-        
         sig_col_start = max(1, total_cols - 8)
-        
         ws.cell(sig_start, sig_col_start).value = "乙 方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
-        # Client Name: Row+1, Col+1
         ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
@@ -685,9 +678,11 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.21 Bolin Footer)
+    # Render Logic: Bolin (v111.22 Bolin Footer Fix)
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod):
+        SIDE_DOUBLE = Side(style='double') # Define double line style
+        
         # 1. Inherit Logic from Shenghuo (Copy & Adapt)
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
@@ -748,8 +743,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == 1: l = BS_MEDIUM 
             if c_idx == total_cols: r = BS_MEDIUM 
             # (1) F5 (Col 6) Left Border Remove Fix: If col is 6, left=None.
-            # In general loop, only col 1 gets Left Medium. Others get None. So Col 6 gets None.
-            # This is already handled by `l = BS_MEDIUM if c_idx == 1 else None`.
+            # Fix: Explicitly remove left border for Col 6 (F)
+            if c_idx == 6: l = None 
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
         draw_outer_border_fast(ws, 5, 5, 1, 5) 
@@ -769,16 +764,12 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         curr = start_dt
         for i in range(eff_days):
             col_idx = 6 + i
-            # (1) Row 6: Date Number
             c6 = ws.cell(header_start_row, col_idx); c6.value = curr.day; c6.font = FONT_BOLD; c6.alignment = ALIGN_CENTER; c6.border = BORDER_ALL_MEDIUM
             c6.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
-
-            # (1) Row 7: Weekday
             c7 = ws.cell(header_start_row+1, col_idx); c7.value = ["日","一","二","三","四","五","六"][(curr.weekday()+1)%7]
             c7.font = FONT_BOLD; c7.alignment = ALIGN_CENTER
             c7.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if curr.weekday() >= 5: c7.fill = FILL_WEEKEND
-            
             curr += timedelta(days=1)
 
         end_headers = ["檔次", "定價", "專案價"]
@@ -817,11 +808,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 ws.row_dimensions[curr_row].height = 40
                 ws.cell(curr_row, 1, d_name).alignment = ALIGN_CENTER
                 ws.cell(curr_row, 2, r['region']).alignment = ALIGN_CENTER
-                
                 p_num = int(r.get('program_num', 0)); total_store_count += p_num 
                 suffix = "面" if m_key == "新鮮視" else "店"
                 ws.cell(curr_row, 3, f"{p_num:,}{suffix}").alignment = ALIGN_CENTER
-                
                 ws.cell(curr_row, 4, r['daypart']).alignment = ALIGN_CENTER
                 sec = r['seconds']
                 if m_key == "新鮮視": sec_txt = f"{sec}秒\n影片/影像 1920x1080 (mp4)"
@@ -841,7 +830,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 pkg = r['pkg_display']
                 if r.get('is_pkg_member'): pkg = r['nat_pkg_display'] if idx == 0 else None
                 ws.cell(curr_row, end_c_start+2, pkg).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).alignment = ALIGN_CENTER
-
                 for c_idx in range(1, total_cols + 1):
                     c = ws.cell(curr_row, c_idx); c.font = FONT_STD; c.border = BORDER_ALL_THIN
                 set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
@@ -887,38 +875,43 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         curr_row += 1
         start_footer = curr_row
         
-        # Left Side: Party B (Client)
-        ws.cell(start_footer, 1).value = "乙      方："
-        ws.cell(start_footer, 1).font = Font(name=FONT_MAIN, size=16)
-        
-        ws.cell(start_footer+1, 2).value = client_name # Indent to Col B
-        ws.cell(start_footer+1, 2).font = Font(name=FONT_MAIN, size=16)
-        
-        ws.cell(start_footer+2, 1).value = "統一編號："
-        ws.cell(start_footer+2, 1).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(start_footer+2, 3).value = "90450499" # Hardcoded per request? Or variable? Using 90450499 as requested.
-        ws.cell(start_footer+2, 3).font = Font(name=FONT_MAIN, size=16)
-        
-        ws.cell(start_footer+3, 1).value = "客戶簽章："
-        ws.cell(start_footer+3, 1).font = Font(name=FONT_MAIN, size=16)
-        
-        # Right Side: Remarks
-        rem_col_start = 6 # F
-        ws.cell(start_footer, rem_col_start).value = "Remarks："
-        ws.cell(start_footer, rem_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
-        
-        r_idx = 0
+        # Remarks (Left)
+        r_col_start = 6 # F
+        ws.cell(start_footer, r_col_start).value = "Remarks："
+        ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
+        r_row = start_footer
         for rm in remarks_list:
-            r_row = start_footer + 1 + r_idx
-            # 1,4 Red; 6 Blue; Others Black
+            r_row += 1
+            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
+            is_blue = rm.strip().startswith("6.")
             color = "000000"
-            if rm.strip().startswith("1.") or rm.strip().startswith("4."): color = "FF0000"
-            if rm.strip().startswith("6."): color = "0000FF"
-            
-            c = ws.cell(r_row, rem_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
-            r_idx += 1
+            if is_red: color = "FF0000"
+            if is_blue: color = "0000FF"
+            c = ws.cell(r_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+
+        # Signature (Left) - Parallel
+        sig_col_start = 1
+        ws.cell(start_footer, sig_col_start).value = "乙      方："
+        ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        return start_footer + r_idx + 2
+        ws.cell(start_footer+1, sig_col_start+1).value = "鉑霖整合行銷公關有限公司" # Indent to Col B
+        ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        
+        ws.cell(start_footer+2, sig_col_start).value = "統一編號："
+        ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        # (1) Tax ID Blank
+        ws.cell(start_footer+2, sig_col_start+2).value = "" 
+        ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
+        
+        ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
+        ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+
+        # (2) Double Border Line below Remark 6 + 2 rows
+        target_border_row = r_row + 2
+        for c_idx in range(1, total_cols + 1):
+            ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
+
+        return target_border_row
 
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Schedule"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True
@@ -953,7 +946,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.21 Bolin Footer)")
+        st.title("📺 媒體 Cue 表生成器 (v111.22 Bolin Footer Fix)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
