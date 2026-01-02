@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Logo Position Tuned)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Stable Restore)")
 
 import pandas as pd
 import math
@@ -109,7 +109,7 @@ def find_soffice_path():
             if os.path.exists(p): return p
     return None
 
-# v111.23: Helper to fetch cloud logo
+# Helper to fetch cloud logo (Safe)
 @st.cache_data(show_spinner="正在下載 Logo...", ttl=3600)
 def get_cloud_logo_bytes():
     try:
@@ -659,9 +659,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
-                for c_idx in range(1, total_cols + 1):
-                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-
+                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
             curr_row += 1
         
         curr_row += 1
@@ -685,20 +683,27 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(sig_start+2, sig_col_start+2).value = "" # (2) Blank
+        # (2) Tax ID Blank (v111.23 Fix)
+        ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
-        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
+        ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
-        return curr_row + 3
+        # (3) Double Border below Remark 6 + 2 rows
+        target_border_row = r_row + 2
+        for c_idx in range(1, total_cols + 1):
+            ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
+
+        return target_border_row
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.23 Bolin Final)
+    # Render Logic: Bolin (v111.23 Bolin Fix + Logo Right)
     # -------------------------------------------------------------
-    def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod):
+    def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, logo_bytes=None):
         SIDE_DOUBLE = Side(style='double')
-        logo_bytes = get_cloud_logo_bytes() # v111.23 Cloud Logo
+        if logo_bytes is None:
+            logo_bytes = get_cloud_logo_bytes() # Auto fetch
         
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
@@ -718,14 +723,15 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
         c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
-        # (1) Logo (v111.23) -> Updated to align right (anchor to last col)
+        # (1) Logo (v111.23 Right Align Fix)
         if logo_bytes:
             try:
                 img = openpyxl.drawing.image.Image(io.BytesIO(logo_bytes))
                 scale = 130 / img.height
                 img.height = 130
                 img.width = int(img.width * scale)
-                col_letter = get_column_letter(total_cols) # Align Right attempt
+                
+                col_letter = get_column_letter(total_cols + 1) # Align Right Trick
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
@@ -909,11 +915,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer, sig_col_start).value = "乙      方："
         ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
+        # (2) Party B is Client (v111.23 Fix)
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
         ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："
         ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        # (2) Tax ID Blank (v111.23 Fix)
         ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
@@ -932,7 +940,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     
     if format_type == "Dongwu": render_dongwu_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
     elif format_type == "Shenghuo": render_shenghuo_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
-    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
+    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost) # Removed logo_bytes arg
 
     out = io.BytesIO(); wb.save(out); return out.getvalue()
 
