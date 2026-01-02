@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.12 (Shenghuo Bold)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.13 (Shenghuo Line Fix)")
 
 import pandas as pd
 import math
@@ -617,7 +617,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
+        # (2) Grand total row (A to End) bottom medium border
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+        
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
         
         curr_row += 1
@@ -638,6 +640,11 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if lbl == "Grand Total": b = BS_MEDIUM 
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
+            if lbl == "Grand Total":
+                # (1) Whole row bottom medium border
+                for c_idx in range(1, total_cols + 1):
+                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+
             curr_row += 1
         
         curr_row += 1
@@ -655,10 +662,14 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         sig_col_start = max(1, total_cols - 8)
         ws.cell(sig_start, sig_col_start).value = "乙 方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
+        
+        # Client Name: Row+1, Col+1
         ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
@@ -759,9 +770,7 @@ def main():
                     else: st.error("密碼錯誤")
             else:
                 st.success("✅ 目前狀態：主管模式"); 
-                if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
-            st.markdown("---")
-            if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
+                if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
         st.title("📺 媒體 Cue 表生成器 (v111.12 Shenghuo Bold)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
