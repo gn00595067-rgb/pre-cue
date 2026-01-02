@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.14 (Bolin Beta)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.15 (Bolin Header)")
 
 import pandas as pd
 import math
@@ -375,7 +375,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 row_sum = 0
                 for d_idx in range(eff_days):
                     if d_idx < len(r["schedule"]):
-                        val = r["schedule"][d_idx]; row_sum += val
+                        val = r['schedule'][d_idx]; row_sum += val
                         c_s = ws.cell(curr_row, 8+d_idx); c_s.value = val; c_s.number_format = FMT_NUMBER; c_s.alignment = ALIGN_CENTER
                 ws.cell(curr_row, spots_col_idx, row_sum).alignment = ALIGN_CENTER
                 for c_idx in range(1, total_cols + 1):
@@ -679,7 +679,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.14 Bolin Beta)
+    # Render Logic: Bolin (v111.15 Bolin Header Final)
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod):
         # 1. Inherit Logic from Shenghuo (Copy & Adapt)
@@ -687,56 +687,53 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         end_c_start = 6 + eff_days
         total_cols = end_c_start + 2
 
-        # Column Config (Same as Shenghuo)
-        ws.column_dimensions['A'].width = 22.5; ws.column_dimensions['B'].width = 24.5; ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0
+        # Column Config
+        ws.column_dimensions['A'].width = 21.0 # (2) A Width 21
+        ws.column_dimensions['B'].width = 21.0 # (2) B Width 21
+        ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0
         for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1
         ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5
         ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0
         ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0
         
-        ROW_H_MAP = {1:30, 2:30, 3:46, 4:46, 5:40, 6:40, 7:35, 8:35}
+        ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35} # (1) R1=70, (2) R2,3=33.5
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
         
-        # 2. Bolin Header Logic
+        # 2. Bolin Header Logic (Redesigned)
         # A1 Title
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
-        c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=24, bold=True); c1.alignment = ALIGN_CENTER
+        c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT # (1) Size 28, Left
         
-        # Row 2: TO (Red)
-        ws.merge_cells(f"A2:{get_column_letter(total_cols)}2")
-        # Creating a RichText for mixed color is complex in openpyxl, sticking to simple text with Red Color for now (or splitting cells)
-        # To mimic "TO: Client", we can put "TO：" in A2 and Client in B2? But we merged. 
-        # Simpler approach: Just put text, make it Red.
-        c2 = ws['A2']; c2.value = f"TO：  {client_name}"; c2.font = Font(name=FONT_MAIN, size=16, bold=True, color="FF0000"); c2.alignment = ALIGN_LEFT
+        # Row 2: TO (Separate Cells)
+        c2a = ws['A2']; c2a.value = "TO："; c2a.font = Font(name=FONT_MAIN, size=20, bold=True, color="FF0000"); c2a.alignment = ALIGN_LEFT
+        ws.merge_cells(f"B2:{get_column_letter(total_cols)}2"); c2b = ws['B2']; c2b.value = client_name; c2b.font = Font(name=FONT_MAIN, size=20, bold=True); c2b.alignment = ALIGN_LEFT
         
-        # Row 3: FROM
-        ws.merge_cells(f"A3:{get_column_letter(total_cols)}3")
-        c3 = ws['A3']; c3.value = "FROM：  鉑霖行動行銷 許雅婷 TINA"; c3.font = Font(name=FONT_MAIN, size=16, bold=True); c3.alignment = ALIGN_LEFT
+        # Row 3: FROM (Separate Cells)
+        c3a = ws['A3']; c3a.value = "FROM："; c3a.font = Font(name=FONT_MAIN, size=20, bold=True); c3a.alignment = ALIGN_LEFT
+        ws.merge_cells(f"B3:{get_column_letter(total_cols)}3"); c3b = ws['B3']; c3b.value = "鉑霖行動行銷 許雅婷 TINA"; c3b.font = Font(name=FONT_MAIN, size=20, bold=True); c3b.alignment = ALIGN_LEFT
 
         # Row 4: Client / Spec / Period (Like Shenghuo R5)
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
-        space_gap = "　" * 5
+        space_gap = "　" * 10
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
-        info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}{space_gap}{period_str}"
+        info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}"
         
-        ws.merge_cells(f"A4:{get_column_letter(total_cols)}4")
-        c4 = ws['A4']; c4.value = info_text; c4.font = Font(name=FONT_MAIN, size=14); c4.alignment = ALIGN_LEFT
+        # Split layout like Shenghuo
+        ws.merge_cells(f"A4:{get_column_letter(end_c_start)}4")
+        c4 = ws['A4']; c4.value = info_text; c4.font = Font(name=FONT_MAIN, size=16); c4.alignment = ALIGN_LEFT
+        
+        ws.merge_cells(f"{get_column_letter(end_c_start+1)}4:{get_column_letter(total_cols)}4")
+        c4_r = ws[f"{get_column_letter(end_c_start+1)}4"]; c4_r.value = period_str; c4_r.font = Font(name=FONT_MAIN, size=16); c4_r.alignment = ALIGN_LEFT
+        
         draw_outer_border_fast(ws, 4, 4, 1, total_cols)
 
-        # Row 5: Ad Name (Like Shenghuo R6)
+        # Row 5: Ad Name
         ws.merge_cells(f"A5:{get_column_letter(total_cols)}5")
         c5 = ws['A5']; c5.value = f"廣告名稱：{product_name}"; c5.font = Font(name=FONT_MAIN, size=14); c5.alignment = ALIGN_LEFT
         draw_outer_border_fast(ws, 5, 5, 1, total_cols)
 
-        # 3. Table Structure (Months/Dates) - Shifted up by 1 row compared to Shenghuo
-        # Shenghuo starts headers at 7. Bolin starts at 6.
-        # But wait, Bolin header R6 is Month, R7 is Date. 
-        # Shenghuo header R7 is Month/Header, R8 is Date/Header.
-        # Let's map 1:1 with Shenghuo logic but shifted?
-        # Actually Shenghuo R7/R8 IS the header block. Bolin R6/R7 can be the header block.
-        
+        # 3. Table Structure (Months/Dates) - Shifted
         header_start_row = 6
-        
         headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
         for i, h in enumerate(headers):
             c_idx = i + 1
@@ -788,10 +785,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
 
-        # 4. Data Rows (Same as Shenghuo)
-        curr_row = header_start_row + 2 # Row 8
-        
-        # ... (Copy Data Row Loop from Shenghuo) ...
+        # 4. Data Rows
+        curr_row = header_start_row + 2
         grouped_data = {"全家廣播": sorted([r for r in rows if r["media"]=="全家廣播"], key=lambda x:x['seconds']),
                         "新鮮視": sorted([r for r in rows if r["media"]=="新鮮視"], key=lambda x:x['seconds']),
                         "家樂福": sorted([r for r in rows if r["media"]=="家樂福"], key=lambda x:x['seconds'])}
@@ -809,6 +804,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 p_num = int(r.get('program_num', 0)); total_store_count += p_num 
                 suffix = "面" if m_key == "新鮮視" else "店"
                 ws.cell(curr_row, 3, f"{p_num:,}{suffix}").alignment = ALIGN_CENTER
+                
                 ws.cell(curr_row, 4, r['daypart']).alignment = ALIGN_CENTER
                 sec = r['seconds']
                 if m_key == "新鮮視": sec_txt = f"{sec}秒\n影片/影像 1920x1080 (mp4)"
@@ -882,7 +878,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if is_blue: color = "0000FF"
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
-        # Signature (Bolin)
+        # Signature (Bolin Custom)
         sig_start = curr_row - len(remarks_list)
         sig_col_start = max(1, total_cols - 8)
         
@@ -902,7 +898,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        # Top Border for Signature Block
         for c_idx in range(1, total_cols + 1): set_border(ws.cell(sig_start, c_idx), top=BS_THIN)
 
         return curr_row + 3
@@ -940,7 +935,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.14 Bolin Beta)")
+        st.title("📺 媒體 Cue 表生成器 (v111.15 Bolin Header)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
