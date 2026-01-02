@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.20 (Bolin Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.21 (Bolin Footer)")
 
 import pandas as pd
 import math
@@ -87,8 +87,8 @@ def get_remarks_text(sign_deadline, billing_month, payment_date):
     p_str = payment_date.strftime("%Y/%m/%d") if payment_date else "____/__/__"
     return [
         f"1.請於 {d_str} 11:30前 回簽及進單，方可順利上檔。",
-        "2.以上節目名稱如有異動，以上檔時節目名稱為主，如遇時段滿檔，上檔時間挪後或更換至同級時段。",
-        "3.通路店鋪數與開機率至少七成(以上)。每日因加盟數調整，或遇店舖年度季度改裝、設備維護升級及保修等狀況，會有一定幅度增減。",
+        "2.以上節目名稱如有異動，以上檔時節目名稱為主，如遇電台時段滿檔，上檔時間挪後或更換至同級時段。",
+        "3.通路店鋪數與開機率開機率至少七成(以上)。每日因加盟數調整，或遇店舖年度季度改裝、設備維護升級及保修等狀況，會有一定幅度增減。",
         "4.託播方需於上檔前 5 個工作天，提供廣告帶(mp3)、影片/影像 1920x1080 (mp4)。",
         f"5.雙方同意費用請款月份 : {billing_month}，如有修正必要，將另行E-Mail告知，並視為正式合約之一部分。",
         f"6.付款兌現日期：{p_str}"
@@ -685,7 +685,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.20 Bolin Critical Fix)
+    # Render Logic: Bolin (v111.21 Bolin Footer)
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod):
         # 1. Inherit Logic from Shenghuo (Copy & Adapt)
@@ -693,7 +693,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         end_c_start = 6 + eff_days
         total_cols = end_c_start + 2
 
-        # Column Config
         ws.column_dimensions['A'].width = 21.0
         ws.column_dimensions['B'].width = 21.0
         ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0
@@ -705,38 +704,27 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35}
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
         
-        # 2. Bolin Header Logic (v111.20)
-        # A1 Title
+        # 2. Bolin Header Logic (v111.16)
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
         c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
-        # Row 2: TO (Red) - All cells Bold
         c2a = ws['A2']; c2a.value = "TO："; c2a.font = Font(name=FONT_MAIN, size=20, bold=True, color="FF0000"); c2a.alignment = ALIGN_LEFT
         ws.merge_cells(f"B2:{get_column_letter(total_cols)}2"); c2b = ws['B2']; c2b.value = client_name; c2b.font = Font(name=FONT_MAIN, size=20, bold=True, color="FF0000"); c2b.alignment = ALIGN_LEFT
         
-        # Row 3: FROM - All cells Bold
         c3a = ws['A3']; c3a.value = "FROM："; c3a.font = Font(name=FONT_MAIN, size=20, bold=True); c3a.alignment = ALIGN_LEFT
         ws.merge_cells(f"B3:{get_column_letter(total_cols)}3"); c3b = ws['B3']; c3b.value = "鉑霖行動行銷 許雅婷 TINA"; c3b.font = Font(name=FONT_MAIN, size=20, bold=True); c3b.alignment = ALIGN_LEFT
 
-        # Row 4: Client / Spec / Period (Bold)
+        # Row 4 (Modified v111.17: Font 14)
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
         
-        # A4: Client Label (Font 14)
         c4a = ws['A4']; c4a.value = "客戶名稱："; c4a.font = Font(name=FONT_MAIN, size=14, bold=True); c4a.alignment = ALIGN_LEFT
-        
-        # B4: Client Name (Merged B4:E4)
         ws.merge_cells("B4:E4"); c4b = ws['B4']; c4b.value = client_name; c4b.font = Font(name=FONT_MAIN, size=14, bold=True); c4b.alignment = ALIGN_LEFT
-        
-        # F4: Spec (Merged F4 to end_c_start)
         spec_merge_start = "F4"; spec_merge_end = f"{get_column_letter(end_c_start)}4"
         ws.merge_cells(f"{spec_merge_start}:{spec_merge_end}")
         c4f = ws['F4']; c4f.value = f"廣告規格：{sec_str}"; c4f.font = Font(name=FONT_MAIN, size=14, bold=True); c4f.alignment = ALIGN_LEFT
-        
-        # Period (Right)
         ws.merge_cells(f"{get_column_letter(end_c_start+1)}4:{get_column_letter(total_cols)}4")
         c4_r = ws[f"{get_column_letter(end_c_start+1)}4"]; c4_r.value = period_str; c4_r.font = Font(name=FONT_MAIN, size=14, bold=True); c4_r.alignment = ALIGN_LEFT
-        
         draw_outer_border_fast(ws, 4, 4, 1, total_cols)
 
         # Row 5 (Modified v111.18: Specific Borders, Left Align Months)
@@ -759,6 +747,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             t, b, l, r = BS_MEDIUM, BS_MEDIUM, None, None
             if c_idx == 1: l = BS_MEDIUM 
             if c_idx == total_cols: r = BS_MEDIUM 
+            # (1) F5 (Col 6) Left Border Remove Fix: If col is 6, left=None.
+            # In general loop, only col 1 gets Left Medium. Others get None. So Col 6 gets None.
+            # This is already handled by `l = BS_MEDIUM if c_idx == 1 else None`.
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
         draw_outer_border_fast(ws, 5, 5, 1, 5) 
@@ -892,42 +883,42 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
             curr_row += 1
         
-        # Remarks
+        # (2) Footer Re-layout
         curr_row += 1
-        ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True)
+        start_footer = curr_row
+        
+        # Left Side: Party B (Client)
+        ws.cell(start_footer, 1).value = "乙      方："
+        ws.cell(start_footer, 1).font = Font(name=FONT_MAIN, size=16)
+        
+        ws.cell(start_footer+1, 2).value = client_name # Indent to Col B
+        ws.cell(start_footer+1, 2).font = Font(name=FONT_MAIN, size=16)
+        
+        ws.cell(start_footer+2, 1).value = "統一編號："
+        ws.cell(start_footer+2, 1).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+2, 3).value = "90450499" # Hardcoded per request? Or variable? Using 90450499 as requested.
+        ws.cell(start_footer+2, 3).font = Font(name=FONT_MAIN, size=16)
+        
+        ws.cell(start_footer+3, 1).value = "客戶簽章："
+        ws.cell(start_footer+3, 1).font = Font(name=FONT_MAIN, size=16)
+        
+        # Right Side: Remarks
+        rem_col_start = 6 # F
+        ws.cell(start_footer, rem_col_start).value = "Remarks："
+        ws.cell(start_footer, rem_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
+        
+        r_idx = 0
         for rm in remarks_list:
-            curr_row += 1
-            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
-            is_blue = rm.strip().startswith("6.")
+            r_row = start_footer + 1 + r_idx
+            # 1,4 Red; 6 Blue; Others Black
             color = "000000"
-            if is_red: color = "FF0000"
-            if is_blue: color = "0000FF"
-            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
-
-        # Signature (Bolin Custom) - (1) Parallel to Remarks
-        # IMPORTANT: Define sig_start here to avoid NameError
-        sig_start = curr_row - len(remarks_list)
-        sig_col_start = max(1, total_cols - 8)
+            if rm.strip().startswith("1.") or rm.strip().startswith("4."): color = "FF0000"
+            if rm.strip().startswith("6."): color = "0000FF"
+            
+            c = ws.cell(r_row, rem_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+            r_idx += 1
         
-        # Left Side (Party A) - Bolin
-        ws.merge_cells(start_row=sig_start, start_column=1, end_row=sig_start, end_column=7) 
-        c_l1 = ws.cell(sig_start, 1); c_l1.value = "甲    方：鉑霖整合行銷公關有限公司"; c_l1.font = FONT_STD; c_l1.alignment = ALIGN_LEFT
-        ws.merge_cells(start_row=sig_start+1, start_column=1, end_row=sig_start+1, end_column=7) 
-        c_l2 = ws.cell(sig_start+1, 1); c_l2.value = "統一編號：90450499"; c_l2.font = FONT_STD; c_l2.alignment = ALIGN_LEFT
-        
-        # Right Side (Party B) - Client
-        ws.cell(sig_start, sig_col_start).value = "乙 方："
-        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
-        ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
-        ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(sig_start+2, sig_col_start).value = "統一編號："
-        ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
-        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        
-        for c_idx in range(1, total_cols + 1): set_border(ws.cell(sig_start, c_idx), top=BS_THIN)
-
-        return curr_row + 3
+        return start_footer + r_idx + 2
 
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Schedule"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True
@@ -962,7 +953,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.20 Bolin Fix)")
+        st.title("📺 媒體 Cue 表生成器 (v111.21 Bolin Footer)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
