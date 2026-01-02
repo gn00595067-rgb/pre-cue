@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.15 (Bolin Header)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.16 (Bolin Style)")
 
 import pandas as pd
 import math
@@ -375,7 +375,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 row_sum = 0
                 for d_idx in range(eff_days):
                     if d_idx < len(r["schedule"]):
-                        val = r['schedule'][d_idx]; row_sum += val
+                        val = r["schedule"][d_idx]; row_sum += val
                         c_s = ws.cell(curr_row, 8+d_idx); c_s.value = val; c_s.number_format = FMT_NUMBER; c_s.alignment = ALIGN_CENTER
                 ws.cell(curr_row, spots_col_idx, row_sum).alignment = ALIGN_CENTER
                 for c_idx in range(1, total_cols + 1):
@@ -605,6 +605,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
 
+        # --- Total Row ---
         ws.row_dimensions[curr_row].height = 40
         ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER; ws.cell(curr_row, 3).alignment = ALIGN_CENTER; ws.cell(curr_row, 3).font = FONT_BOLD
         ws.cell(curr_row, 5, "Total").alignment = ALIGN_CENTER; ws.cell(curr_row, 5).font = FONT_BOLD
@@ -623,7 +624,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
         
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-        
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
         
         curr_row += 1
@@ -645,10 +645,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
-                # (1) Whole row bottom medium border
-                for c_idx in range(1, total_cols + 1):
-                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
-
+                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
             curr_row += 1
         
         curr_row += 1
@@ -679,7 +676,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.15 Bolin Header Final)
+    # Render Logic: Bolin (v111.16 Bolin Header Style)
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod):
         # 1. Inherit Logic from Shenghuo (Copy & Adapt)
@@ -688,51 +685,59 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         total_cols = end_c_start + 2
 
         # Column Config
-        ws.column_dimensions['A'].width = 21.0 # (2) A Width 21
-        ws.column_dimensions['B'].width = 21.0 # (2) B Width 21
+        ws.column_dimensions['A'].width = 21.0
+        ws.column_dimensions['B'].width = 21.0
         ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0
         for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1
         ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5
         ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0
         ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0
         
-        ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35} # (1) R1=70, (2) R2,3=33.5
+        ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35}
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
         
-        # 2. Bolin Header Logic (Redesigned)
+        # 2. Bolin Header Logic (v111.16)
         # A1 Title
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
-        c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT # (1) Size 28, Left
+        c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
-        # Row 2: TO (Separate Cells)
+        # Row 2: TO (Red) - All cells Bold
         c2a = ws['A2']; c2a.value = "TO："; c2a.font = Font(name=FONT_MAIN, size=20, bold=True, color="FF0000"); c2a.alignment = ALIGN_LEFT
-        ws.merge_cells(f"B2:{get_column_letter(total_cols)}2"); c2b = ws['B2']; c2b.value = client_name; c2b.font = Font(name=FONT_MAIN, size=20, bold=True); c2b.alignment = ALIGN_LEFT
+        ws.merge_cells(f"B2:{get_column_letter(total_cols)}2"); c2b = ws['B2']; c2b.value = client_name; c2b.font = Font(name=FONT_MAIN, size=20, bold=True, color="FF0000"); c2b.alignment = ALIGN_LEFT
         
-        # Row 3: FROM (Separate Cells)
+        # Row 3: FROM - All cells Bold
         c3a = ws['A3']; c3a.value = "FROM："; c3a.font = Font(name=FONT_MAIN, size=20, bold=True); c3a.alignment = ALIGN_LEFT
         ws.merge_cells(f"B3:{get_column_letter(total_cols)}3"); c3b = ws['B3']; c3b.value = "鉑霖行動行銷 許雅婷 TINA"; c3b.font = Font(name=FONT_MAIN, size=20, bold=True); c3b.alignment = ALIGN_LEFT
 
-        # Row 4: Client / Spec / Period (Like Shenghuo R5)
+        # Row 4: Client / Spec / Period (Bold)
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
-        space_gap = "　" * 10
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
-        info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}"
         
-        # Split layout like Shenghuo
-        ws.merge_cells(f"A4:{get_column_letter(end_c_start)}4")
-        c4 = ws['A4']; c4.value = info_text; c4.font = Font(name=FONT_MAIN, size=16); c4.alignment = ALIGN_LEFT
+        # A4: Client Label
+        c4a = ws['A4']; c4a.value = "客戶名稱："; c4a.font = Font(name=FONT_MAIN, size=16, bold=True); c4a.alignment = ALIGN_LEFT
         
+        # B4: Client Name (Merged B4:E4)
+        ws.merge_cells("B4:E4"); c4b = ws['B4']; c4b.value = client_name; c4b.font = Font(name=FONT_MAIN, size=16, bold=True); c4b.alignment = ALIGN_LEFT
+        
+        # F4: Spec (Merged F4 to end_c_start)
+        # Note: F is Col 6.
+        spec_merge_start = "F4"; spec_merge_end = f"{get_column_letter(end_c_start)}4"
+        ws.merge_cells(f"{spec_merge_start}:{spec_merge_end}")
+        c4f = ws['F4']; c4f.value = f"廣告規格：{sec_str}"; c4f.font = Font(name=FONT_MAIN, size=16, bold=True); c4f.alignment = ALIGN_LEFT
+        
+        # Period (Right)
         ws.merge_cells(f"{get_column_letter(end_c_start+1)}4:{get_column_letter(total_cols)}4")
-        c4_r = ws[f"{get_column_letter(end_c_start+1)}4"]; c4_r.value = period_str; c4_r.font = Font(name=FONT_MAIN, size=16); c4_r.alignment = ALIGN_LEFT
+        c4_r = ws[f"{get_column_letter(end_c_start+1)}4"]; c4_r.value = period_str; c4_r.font = Font(name=FONT_MAIN, size=16, bold=True); c4_r.alignment = ALIGN_LEFT
         
         draw_outer_border_fast(ws, 4, 4, 1, total_cols)
 
-        # Row 5: Ad Name
-        ws.merge_cells(f"A5:{get_column_letter(total_cols)}5")
-        c5 = ws['A5']; c5.value = f"廣告名稱：{product_name}"; c5.font = Font(name=FONT_MAIN, size=14); c5.alignment = ALIGN_LEFT
+        # Row 5: Ad Name (Bold)
+        c5a = ws['A5']; c5a.value = "廣告名稱："; c5a.font = Font(name=FONT_MAIN, size=14, bold=True); c5a.alignment = ALIGN_LEFT
+        ws.merge_cells(f"B5:{get_column_letter(total_cols)}5")
+        c5b = ws['B5']; c5b.value = product_name; c5b.font = Font(name=FONT_MAIN, size=14, bold=True); c5b.alignment = ALIGN_LEFT
         draw_outer_border_fast(ws, 5, 5, 1, total_cols)
 
-        # 3. Table Structure (Months/Dates) - Shifted
+        # 3. Table Structure (Months/Dates)
         header_start_row = 6
         headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
         for i, h in enumerate(headers):
@@ -935,7 +940,7 @@ def main():
             st.markdown("---")
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.15 Bolin Header)")
+        st.title("📺 媒體 Cue 表生成器 (v111.16 Bolin Style)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
