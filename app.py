@@ -3,7 +3,7 @@ import traceback
 import time
 import gc
 from itertools import groupby
-import requests # 確保雲端抓圖功能
+import requests # 用於下載雲端圖片
 
 # =========================================================
 # 1. 頁面設定
@@ -36,7 +36,7 @@ if "cb_cf" not in st.session_state: st.session_state.cb_cf = False
 # 3. 全域常數
 # =========================================================
 GSHEET_SHARE_URL = "https://docs.google.com/spreadsheets/d/1bzmG-N8XFsj8m3LUPqA8K70AcIqaK4Qhq1VPWcK0w_s/edit?usp=sharing"
-# v111.24+: Cloud Logo URL (Export as PNG)
+# 雲端 Logo 連結 (PNG)
 BOLIN_LOGO_URL = "https://docs.google.com/drawings/d/17Uqgp-7LJJj9E4bV7Azo7TwXESPKTTIsmTbf-9tU9eE/export/png"
 
 FONT_MAIN = "微軟正黑體"
@@ -110,7 +110,7 @@ def find_soffice_path():
             if os.path.exists(p): return p
     return None
 
-# Helper to fetch cloud logo automatically
+# 下載雲端 Logo 的函式
 @st.cache_data(show_spinner="正在下載 Logo...", ttl=3600)
 def get_cloud_logo_bytes():
     try:
@@ -265,11 +265,13 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # 7. Render Engines (Optimized with Object Pooling & Caching)
 # =========================================================
 
+# 修復重點：這裡一定要接收 logo_bytes=None 參數，否則 main 呼叫時會報 TypeError
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
-def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
+def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost, logo_bytes=None):
     import openpyxl
     from openpyxl.utils import get_column_letter, column_index_from_string
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
+    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 
     SIDE_THIN = Side(style=BS_THIN); SIDE_MEDIUM = Side(style=BS_MEDIUM); SIDE_HAIR = Side(style=BS_HAIR)
     BORDER_ALL_THIN = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
@@ -698,6 +700,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, logo_bytes=None):
         SIDE_DOUBLE = Side(style='double')
+        if logo_bytes is None:
+            logo_bytes = get_cloud_logo_bytes() # Auto fetch
         
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
@@ -721,9 +725,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         if logo_bytes:
             try:
                 img = openpyxl.drawing.image.Image(io.BytesIO(logo_bytes))
-                scale = 125 / img.height
-                img.height = 125
+                scale = 130 / img.height
+                img.height = 130
                 img.width = int(img.width * scale)
+                
                 col_letter = get_column_letter(total_cols - 1)
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
@@ -809,7 +814,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c7.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if c_idx == date_start_col: set_border(c7, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c7, right=BS_MEDIUM)
-            c8 = ws.cell(header_start_row+1, c_idx)
+            c8 = ws.cell(8, c_idx)
             c8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
@@ -857,6 +862,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if data[0].get('is_pkg_member'): ws.merge_cells(start_row=start_merge, start_column=end_c_start+2, end_row=curr_row-1, end_column=end_c_start+2)
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
 
+        # Total Row
         ws.row_dimensions[curr_row].height = 40
         ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER; ws.cell(curr_row, 3).alignment = ALIGN_CENTER; ws.cell(curr_row, 3).font = FONT_BOLD
         ws.cell(curr_row, 5, "Total").alignment = ALIGN_CENTER; ws.cell(curr_row, 5).font = FONT_BOLD
@@ -872,6 +878,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
         curr_row += 1
 
+        # Footer
         vat = int(budget * 0.05); grand_total = budget + vat
         footer_stack = [("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
         for lbl, val in footer_stack:
@@ -909,11 +916,20 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        # Tax ID Blank
+        ws.cell(sig_start+2, sig_col_start+2).value = "" 
+        ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
-        return curr_row + 3
+        # (3) Double Border below Remark 6 + 2 rows
+        SIDE_DOUBLE = Side(style='double')
+        target_border_row = curr_row + 2
+        for c_idx in range(1, total_cols + 1):
+            ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
+
+        return target_border_row
 
     wb = openpyxl.Workbook(); ws = wb.active; ws.title = "Schedule"
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE; ws.page_setup.paperSize = ws.PAPERSIZE_A4; ws.page_setup.fitToPage = True
@@ -950,7 +966,7 @@ def main():
             logo_file = st.file_uploader("上傳 Logo (僅柏霖樣板)", type=["png", "jpg", "jpeg"])
             if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
 
-        st.title("📺 媒體 Cue 表生成器 (v111.23 Final)")
+        st.title("📺 媒體 Cue 表生成器 (v111.23 Restore)")
         format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
 
         c1, c2, c3, c4, c5_sales = st.columns(5)
