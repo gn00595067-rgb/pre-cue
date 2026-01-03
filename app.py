@@ -8,7 +8,7 @@ import requests
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.32 (Debugged)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.33 (Final Perfect)")
 
 import pandas as pd
 import math
@@ -264,7 +264,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # =========================================================
 
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
-def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost, logo_bytes=None):
+def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
     import openpyxl
     from openpyxl.utils import get_column_letter, column_index_from_string
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
@@ -303,7 +303,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=SIDE_MEDIUM)
 
     # -------------------------------------------------------------
-    # Render Logic: Dongwu
+    # Render Logic: Dongwu (v111.1 Signature Polish)
     # -------------------------------------------------------------
     def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -572,6 +572,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if not data: continue
             start_merge = curr_row
             d_name = f"全家便利商店\n{m_key}廣告" if m_key != "家樂福" else "家樂福"
+            
             for idx, r in enumerate(data):
                 ws.row_dimensions[curr_row].height = 40
                 ws.cell(curr_row, 1, d_name).alignment = ALIGN_CENTER
@@ -604,37 +605,50 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if data[0].get('is_pkg_member'): ws.merge_cells(start_row=start_merge, start_column=end_c_start+2, end_row=curr_row-1, end_column=end_c_start+2)
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
 
-        # Total Row
+        # --- Total Row ---
         ws.row_dimensions[curr_row].height = 40
         ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER; ws.cell(curr_row, 3).alignment = ALIGN_CENTER; ws.cell(curr_row, 3).font = FONT_BOLD
         ws.cell(curr_row, 5, "Total").alignment = ALIGN_CENTER; ws.cell(curr_row, 5).font = FONT_BOLD
+        
         for d_idx in range(eff_days):
+            col_idx = 6 + d_idx
             daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
-            c = ws.cell(curr_row, 6+d_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD
+            c = ws.cell(curr_row, col_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD
+        
         ws.cell(curr_row, end_c_start, sum([sum(r['schedule']) for r in rows])).alignment = ALIGN_CENTER; ws.cell(curr_row, end_c_start).font = FONT_BOLD
+        
         ws.cell(curr_row, end_c_start+1, total_list_sum).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).font = FONT_BOLD; ws.cell(curr_row, end_c_start+1).alignment = ALIGN_CENTER
         ws.cell(curr_row, end_c_start+2, budget).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).font = FONT_BOLD; ws.cell(curr_row, end_c_start+2).alignment = ALIGN_CENTER
+        
         for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
         draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
+        
         for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
         set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
+        
         curr_row += 1
 
-        # Footer
         vat = int(budget * 0.05); grand_total = budget + vat
         footer_stack = [("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
+        
         for lbl, val in footer_stack:
             ws.row_dimensions[curr_row].height = 30
             c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
             c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_BOLD 
+            
             t, b, l, r = BS_THIN, BS_THIN, BS_MEDIUM, BS_THIN
             if lbl == "Grand Total": b = BS_MEDIUM 
             c_l.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            
             t, b, l, r = BS_THIN, BS_THIN, BS_THIN, BS_MEDIUM
             if lbl == "Grand Total": b = BS_MEDIUM 
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            
             if lbl == "Grand Total":
-                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+                # Fix: Use 'lbl' variable from loop to trigger this block
+                for c_idx in range(1, total_cols + 1):
+                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+
             curr_row += 1
         
         curr_row += 1
@@ -648,8 +662,12 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if is_blue: color = "0000FF"
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
+        # (5) Signature - Parallel to Remarks
+        # Shift down 1 row relative to Remarks start
         sig_start = curr_row - len(remarks_list)
+        
         sig_col_start = max(1, total_cols - 8)
+        
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
@@ -678,7 +696,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, logo_bytes=None):
         SIDE_DOUBLE = Side(style='double')
-        logo_bytes = get_cloud_logo_bytes() # Auto fetch from cloud
+        if logo_bytes is None:
+            logo_bytes = get_cloud_logo_bytes() # Auto fetch
         
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
@@ -698,7 +717,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']
         c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         
-        # (1) Logo
+        # (1) Logo (v111.23)
         if logo_bytes:
             try:
                 img = openpyxl.drawing.image.Image(io.BytesIO(logo_bytes))
@@ -706,7 +725,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 img.height = 130
                 img.width = int(img.width * scale)
                 
-                col_letter = get_column_letter(total_cols - 4) # Move left ~4 columns as requested
+                col_letter = get_column_letter(total_cols - 4) # Left Align ~4 cols
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
@@ -900,13 +919,12 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         # (2) Tax ID Blank (v111.23 Fix)
         ws.cell(sig_start+2, sig_col_start+2).value = "" 
-        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16) # [FIXED]: use sig_start, not start_footer
         
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         # (3) Double Border below Remark 6 + 2 rows
-        # Fixed: Use correct row index variable from Remarks loop
         target_border_row = curr_row + 2
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
