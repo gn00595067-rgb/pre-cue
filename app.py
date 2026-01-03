@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Bolin Right-Align)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Bolin Final Fix)")
 
 import pandas as pd
 import math
@@ -36,6 +36,7 @@ if "cb_cf" not in st.session_state: st.session_state.cb_cf = False
 # 3. 全域常數
 # =========================================================
 GSHEET_SHARE_URL = "https://docs.google.com/spreadsheets/d/1bzmG-N8XFsj8m3LUPqA8K70AcIqaK4Qhq1VPWcK0w_s/edit?usp=sharing"
+# v111.23: Cloud Logo URL (Export as PNG)
 BOLIN_LOGO_URL = "https://docs.google.com/drawings/d/17Uqgp-7LJJj9E4bV7Azo7TwXESPKTTIsmTbf-9tU9eE/export/png"
 
 FONT_MAIN = "微軟正黑體"
@@ -46,7 +47,7 @@ DURATIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 REGION_DISPLAY_MAP = {"北區": "北區-北北基", "桃竹苗": "桃區-桃竹苗", "中區": "中區-中彰投", "雲嘉南": "雲嘉南區-雲嘉南", "高屏": "高屏區-高屏", "東區": "東區-宜花東", "全省量販": "全省量販", "全省超市": "全省超市"}
 
 # =========================================================
-# 4. 基礎工具函式 (含 Logo 對齊計算)
+# 4. 基礎工具函式
 # =========================================================
 def parse_count_to_int(x):
     if x is None: return 0
@@ -109,6 +110,7 @@ def find_soffice_path():
             if os.path.exists(p): return p
     return None
 
+# v111.23: Helper to fetch cloud logo
 @st.cache_data(show_spinner="正在下載 Logo...", ttl=3600)
 def get_cloud_logo_bytes():
     try:
@@ -262,82 +264,13 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # =========================================================
 # 7. Render Engines (Optimized with Object Pooling & Caching)
 # =========================================================
-# GPT Suggestion: Pixel Calculation & OneCellAnchor Helpers
-# ---------------------------------------------------------
-from openpyxl.drawing.image import Image as XLImage
-from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
-from openpyxl.utils import get_column_letter
-
-EMU_PER_PIXEL = 9525  # 1 px = 9525 EMU
-
-def col_width_to_pixels(width: float) -> int:
-    """
-    Excel 欄寬換算像素（常用近似公式）
-    """
-    if width is None:
-        width = 8.43  # Excel default
-    if width <= 0:
-        return 0
-    if width < 1:
-        return int(math.floor(width * 12 + 0.5))
-    return int(math.floor(width * 7 + 5))
-
-def sheet_x_pixels_to_col_offset(ws, x_px: int):
-    """
-    把「距離 A 欄左側」的 x_px，換算成 (col_index_0based, colOff_emu)
-    """
-    acc = 0
-    col = 1
-    while True:
-        letter = get_column_letter(col)
-        # Handle cases where dimension is not set (use default approximation)
-        dim = ws.column_dimensions.get(letter)
-        w = dim.width if dim else 8.43
-        w_px = col_width_to_pixels(w)
-        if acc + w_px > x_px:
-            inside = x_px - acc
-            return col - 1, inside * EMU_PER_PIXEL  # 0-based col
-        acc += w_px
-        col += 1
-
-def add_logo_right_aligned(ws, logo_bytes: bytes, right_col_1based: int, top_row_1based: int = 1, margin_px: int = 0, target_height_px: int = 125):
-    """
-    把 logo 的右側切齊到 right_col 的右邊界
-    """
-    img = XLImage(io.BytesIO(logo_bytes))
-
-    # 固定高度（你原本就是這樣）
-    scale = target_height_px / img.height
-    img.height = target_height_px
-    img.width = int(img.width * scale)
-
-    # 1) 算表格最右邊界像素：A~right_col 欄寬總和
-    right_edge_px = 0
-    for c in range(1, right_col_1based + 1):
-        letter = get_column_letter(c)
-        dim = ws.column_dimensions.get(letter)
-        width_val = dim.width if dim else 8.43 # Default if not set
-        right_edge_px += col_width_to_pixels(width_val)
-
-    # 2) 算圖片左上角應該放在哪個 x 像素
-    x_px = max(0, right_edge_px - img.width - margin_px)
-
-    # 3) 換算成 anchor marker（0-based col/row）
-    col0, colOff = sheet_x_pixels_to_col_offset(ws, x_px)
-
-    # y 就用 top_row 的上緣 + 少量 padding（可自行調）
-    row0 = top_row_1based - 1
-    rowOff = 0
-
-    marker = AnchorMarker(col=col0, colOff=int(colOff), row=row0, rowOff=int(rowOff))
-    img.anchor = OneCellAnchor(_from=marker, ext=img.ext)
-    ws.add_image(img)
 
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
     import openpyxl
     from openpyxl.utils import get_column_letter, column_index_from_string
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
+    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 
     SIDE_THIN = Side(style=BS_THIN); SIDE_MEDIUM = Side(style=BS_MEDIUM); SIDE_HAIR = Side(style=BS_HAIR)
     BORDER_ALL_THIN = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
@@ -712,18 +645,25 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         vat = int(budget * 0.05); grand_total = budget + vat
         footer_stack = [("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
+        
         for lbl, val in footer_stack:
             ws.row_dimensions[curr_row].height = 30
             c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = ALIGN_RIGHT; c_l.font = FONT_STD
             c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_BOLD 
+            
             t, b, l, r = BS_THIN, BS_THIN, BS_MEDIUM, BS_THIN
             if lbl == "Grand Total": b = BS_MEDIUM 
             c_l.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            
             t, b, l, r = BS_THIN, BS_THIN, BS_THIN, BS_MEDIUM
             if lbl == "Grand Total": b = BS_MEDIUM 
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            
             if lbl == "Grand Total":
-                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+                # Fix: Use 'lbl' variable from loop to trigger this block
+                for c_idx in range(1, total_cols + 1):
+                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+
             curr_row += 1
         
         curr_row += 1
@@ -739,24 +679,20 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         sig_start = curr_row - len(remarks_list)
         sig_col_start = max(1, total_cols - 8)
-        ws.cell(sig_start, sig_col_start).value = "乙      方："
+        ws.cell(sig_start, sig_col_start).value = "乙 方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
-        # (2) Party B is Client
-        ws.cell(start_footer+1, sig_col_start+1).value = client_name 
-        ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
+        ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(start_footer+2, sig_col_start).value = "統一編號："
-        ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank
-        ws.cell(start_footer+2, sig_col_start+2).value = "" 
-        ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+2, sig_col_start).value = "統一編號："
+        ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
-        ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
+        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
-        # (3) Double Border below Remark 6 + 2 rows
-        target_border_row = r_row + 2
+        # Corrected variable name: use curr_row instead of undefined r_row
+        target_border_row = curr_row + 2
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
 
@@ -963,20 +899,22 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             curr_row += 1
         
         curr_row += 1
-        ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True)
+        start_footer = curr_row
+        
+        r_col_start = 6 
+        ws.cell(start_footer, r_col_start).value = "Remarks："
+        ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
+        r_row = start_footer
         for rm in remarks_list:
-            curr_row += 1
-            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
-            is_blue = rm.strip().startswith("6.")
+            r_row += 1
             color = "000000"
-            if is_red: color = "FF0000"
-            if is_blue: color = "0000FF"
-            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+            if rm.strip().startswith("1.") or rm.strip().startswith("4."): color = "FF0000"
+            if rm.strip().startswith("6."): color = "0000FF"
+            c = ws.cell(r_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
-        sig_start = curr_row - len(remarks_list)
-        sig_col_start = max(1, total_cols - 8)
-        ws.cell(sig_start, sig_col_start).value = "乙      方："
-        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
+        sig_col_start = 1
+        ws.cell(start_footer, sig_col_start).value = "乙      方："
+        ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
         # (2) Party B is Client
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
@@ -992,7 +930,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         # (3) Double Border below Remark 6 + 2 rows
-        target_border_row = r_row + 2
+        target_border_row = curr_row + 2
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
 
