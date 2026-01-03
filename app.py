@@ -940,4 +940,4 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     out = io.BytesIO(); wb.save(out); return out.getvalue()
 
 if __name__ == "__main__":
-    main()ㄦ
+    main()
