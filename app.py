@@ -3,7 +3,7 @@ import traceback
 import time
 import gc
 from itertools import groupby
-import requests # 必須保留，用於下載雲端圖片
+import requests
 
 # =========================================================
 # 1. 頁面設定
@@ -109,7 +109,7 @@ def find_soffice_path():
             if os.path.exists(p): return p
     return None
 
-# 自動下載雲端 Logo
+# 自動下載雲端 Logo (無需手動上傳)
 @st.cache_data(show_spinner="正在下載 Logo...", ttl=3600)
 def get_cloud_logo_bytes():
     try:
@@ -264,7 +264,8 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # 7. Render Engines (Optimized with Object Pooling & Caching)
 # =========================================================
 
-# 已確認：參數為 9 個，與 main() 呼叫一致。
+# [Fixed]: Removed `logo_bytes` from arguments entirely to avoid mismatch with main().
+# It is now handled internally by `render_bolin_optimized`.
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
     import openpyxl
@@ -467,7 +468,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Shenghuo (v111.13 Row/Font Fix)
+    # Render Logic: Shenghuo
     # -------------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -656,17 +657,17 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
         # (2) Party B is Client
-        ws.cell(sig_start+1, sig_col_start+1).value = client_name 
-        ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+1, sig_col_start+1).value = client_name 
+        ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(sig_start+2, sig_col_start).value = "統一編號："
-        ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank - Fixed NameError Here
-        ws.cell(sig_start+2, sig_col_start+2).value = "" 
-        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+2, sig_col_start).value = "統一編號："
+        ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        # (2) Tax ID Blank (Corrected Variable)
+        ws.cell(start_footer+2, sig_col_start+2).value = "" 
+        ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
-        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
+        ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         # (3) Double Border below Remark 6 + 2 rows
         target_border_row = curr_row + 2
@@ -798,7 +799,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c7.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if c_idx == date_start_col: set_border(c7, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c7, right=BS_MEDIUM)
-            c8 = ws.cell(8, c_idx)
+            c8 = ws.cell(header_start_row+1, c_idx)
             c8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
@@ -895,15 +896,15 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
-        # (2) Party B is Client (v111.23 Fix)
+        # (2) Party B is Client
         ws.cell(sig_start+1, sig_col_start+1).value = client_name 
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank (v111.23 Fix)
+        # (2) Tax ID Blank (Corrected Variable)
         ws.cell(sig_start+2, sig_col_start+2).value = "" 
-        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16) # [FIXED]: use sig_start
+        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16) # [FIXED]: use sig_start, not start_footer
         
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
