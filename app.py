@@ -8,7 +8,7 @@ import requests
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.29 (Corrected)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.30 (Rigorous Fix)")
 
 import pandas as pd
 import math
@@ -465,7 +465,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Shenghuo (v111.13 Row/Font Fix)
+    # Render Logic: Shenghuo
     # -------------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
