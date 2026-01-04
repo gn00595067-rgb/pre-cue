@@ -24,7 +24,7 @@ from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.44 (StyleProxy Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.45 (Production Stable)")
 
 # =========================================================
 # 2. Session State 初始化
@@ -276,17 +276,19 @@ def set_border(cell, top=None, bottom=None, left=None, right=None):
     new_right = Side(style=right) if right else cur.right
     cell.border = Border(top=new_top, bottom=new_bottom, left=new_left, right=new_right)
 
-def draw_outer_border_fast(ws, min_r, max_r, min_c, max_c):
+def apply_outer_border(ws, min_r, max_r, min_c, max_c):
+    # FIXED: Use Side(style=...) to avoid TypeError
+    side_medium = Side(style=BS_MEDIUM)
     for c in range(min_c, max_c + 1):
         cell = ws.cell(min_r, c); cur = cell.border
-        cell.border = Border(top=BS_MEDIUM, bottom=cur.bottom, left=cur.left, right=cur.right)
+        cell.border = Border(top=side_medium, bottom=cur.bottom, left=cur.left, right=cur.right)
         cell = ws.cell(max_r, c); cur = cell.border
-        cell.border = Border(top=cur.top, bottom=BS_MEDIUM, left=cur.left, right=cur.right)
+        cell.border = Border(top=cur.top, bottom=side_medium, left=cur.left, right=cur.right)
     for r in range(min_r, max_r + 1):
         cell = ws.cell(r, min_c); cur = cell.border
-        cell.border = Border(top=cur.top, bottom=cur.bottom, left=BS_MEDIUM, right=cur.right)
+        cell.border = Border(top=cur.top, bottom=cur.bottom, left=side_medium, right=cur.right)
         cell = ws.cell(r, max_c); cur = cell.border
-        cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=BS_MEDIUM)
+        cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=side_medium)
 
 def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name, product_name, remarks_list):
     eff_days = (end_dt - start_dt).days + 1
@@ -306,8 +308,8 @@ def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod, client_nam
     infos = [("A3", "客戶名稱：", client_name), ("A4", "Product：", p_str), 
                 ("A5", "Period :", f"{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"), ("A6", "Medium :", medium_str)]
     for pos, lbl, val in infos:
-        c = ws[pos]; c.value = lbl; c.font = Font(name=FONT_MAIN, size=14, bold=True); c.alignment = Alignment(vertical='center')
-        c2 = ws.cell(c.row, 2); c2.value = val; c2.font = Font(name=FONT_MAIN, size=14, bold=True); c2.alignment = Alignment(vertical='center')
+        c = ws[pos]; c.value = lbl; c.font = FONT_BOLD; c.alignment = Alignment(vertical='center')
+        c2 = ws.cell(c.row, 2); c2.value = val; c2.font = FONT_BOLD; c2.alignment = Alignment(vertical='center')
     
     for c_idx in range(1, total_cols + 1): set_border(ws.cell(3, c_idx), top=BS_MEDIUM)
 
@@ -317,10 +319,10 @@ def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod, client_nam
     for col, txt in headers:
         col_idx = column_index_from_string(col)
         ws.merge_cells(f"{col}7:{col}8"); c7 = ws.cell(7, col_idx); c7.value = txt; c8 = ws.cell(8, col_idx)
-        c7.font = Font(name=FONT_MAIN, size=14, bold=True); c7.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        # Fix: Create explicit border object instead of assigning proxy
-        b_obj = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
-        c7.border = b_obj; c8.border = b_obj
+        c7.font = FONT_BOLD; c7.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        # FIXED: Create separate border objects
+        c7.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+        c8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
         set_border(c7, top=BS_MEDIUM); set_border(c8, bottom=BS_MEDIUM)
 
     curr = start_dt
@@ -330,18 +332,18 @@ def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod, client_nam
         if curr.weekday() >= 5: c_w.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
         curr += timedelta(days=1)
         c_d.font = Font(name=FONT_MAIN, size=12); c_w.font = Font(name=FONT_MAIN, size=12); c_d.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); c_w.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-        # Fix: Explicit border object
-        b_obj = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
-        c_d.border = b_obj; c_w.border = b_obj
+        # FIXED: Separate border objects
+        c_d.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+        c_w.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
         set_border(c_d, top=BS_MEDIUM); set_border(c_w, bottom=BS_MEDIUM)
 
     c_spots_7 = ws.cell(7, spots_col_idx); c_spots_7.value = "檔次"
     c_spots_8 = ws.cell(8, spots_col_idx)
     ws.merge_cells(start_row=7, start_column=spots_col_idx, end_row=8, end_column=spots_col_idx)
-    c_spots_7.font = Font(name=FONT_MAIN, size=14, bold=True); c_spots_7.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    # Fix: Explicit border object
-    b_obj = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
-    c_spots_7.border = b_obj; c_spots_8.border = b_obj
+    c_spots_7.font = FONT_BOLD; c_spots_7.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    # FIXED: Separate border objects
+    c_spots_7.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+    c_spots_8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
     set_border(c_spots_7, top=BS_MEDIUM, left=BS_MEDIUM); set_border(c_spots_8, bottom=BS_MEDIUM, left=BS_MEDIUM)
     set_border(ws['A7'], right=BS_MEDIUM); set_border(ws['A8'], right=BS_MEDIUM)
 
@@ -394,7 +396,7 @@ def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod, client_nam
                 while m_end + 1 < curr_row and ws.cell(m_end+1, col).value == val: m_end += 1
                 if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col, end_row=m_end, end_column=col)
                 m_start = m_end + 1
-        draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
+        apply_outer_border(ws, start_merge, curr_row-1, 1, total_cols)
         for r in range(start_merge, curr_row):
             set_border(ws.cell(r, 1), right=BS_MEDIUM); set_border(ws.cell(r, spots_col_idx), left=BS_MEDIUM)
 
@@ -424,7 +426,7 @@ def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod, client_nam
         if label == "Grand Total":
             for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM)
         curr_row += 1
-    draw_outer_border_fast(ws, 7, curr_row-1, 1, total_cols)
+    apply_outer_border(ws, 7, curr_row-1, 1, total_cols)
     
     curr_row += 1; ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True, underline='single')
     for rm in remarks_list:
@@ -432,22 +434,22 @@ def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod, client_nam
         is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
         c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=14, color="FF0000" if is_red else "000000")
 
-    curr_row += 2 # Spacer
-    sig_start = curr_row
-    ws.merge_cells(start_row=sig_start, start_column=1, end_row=sig_start, end_column=7) 
-    c_l1 = ws.cell(sig_start, 1); c_l1.value = "甲    方：東吳廣告股份有限公司"; c_l1.font = Font(name=FONT_MAIN, size=12); c_l1.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-    ws.merge_cells(start_row=sig_start+1, start_column=1, end_row=sig_start+1, end_column=7) 
-    c_l2 = ws.cell(sig_start+1, 1); c_l2.value = "統一編號：20935458"; c_l2.font = Font(name=FONT_MAIN, size=12); c_l2.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    curr_row += 2 
+    _footer_row = curr_row
+    ws.merge_cells(start_row=_footer_row, start_column=1, end_row=_footer_row, end_column=7) 
+    c_l1 = ws.cell(_footer_row, 1); c_l1.value = "甲    方：東吳廣告股份有限公司"; c_l1.font = Font(name=FONT_MAIN, size=12); c_l1.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    ws.merge_cells(start_row=_footer_row+1, start_column=1, end_row=_footer_row+1, end_column=7) 
+    c_l2 = ws.cell(_footer_row+1, 1); c_l2.value = "統一編號：20935458"; c_l2.font = Font(name=FONT_MAIN, size=12); c_l2.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
     
-    right_start_col = 20 # Column T
-    ws.merge_cells(start_row=sig_start, start_column=right_start_col, end_row=sig_start, end_column=right_start_col+7) 
-    c_r1 = ws.cell(sig_start, right_start_col); c_r1.value = f"乙    方：{client_name}"; c_r1.font = Font(name=FONT_MAIN, size=12); c_r1.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-    ws.merge_cells(start_row=sig_start+1, start_column=right_start_col, end_row=sig_start+1, end_column=right_start_col+7)
-    c_r2 = ws.cell(sig_start+1, right_start_col); c_r2.value = "統一編號："; c_r2.font = Font(name=FONT_MAIN, size=12); c_r2.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-    ws.merge_cells(start_row=sig_start+2, start_column=right_start_col, end_row=sig_start+2, end_column=right_start_col+7)
-    c_r3 = ws.cell(sig_start+2, right_start_col); c_r3.value = "客戶簽章："; c_r3.font = Font(name=FONT_MAIN, size=12); c_r3.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    right_start_col = 20 
+    ws.merge_cells(start_row=_footer_row, start_column=right_start_col, end_row=_footer_row, end_column=right_start_col+7) 
+    c_r1 = ws.cell(_footer_row, right_start_col); c_r1.value = f"乙    方：{client_name}"; c_r1.font = Font(name=FONT_MAIN, size=12); c_r1.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    ws.merge_cells(start_row=_footer_row+1, start_column=right_start_col, end_row=_footer_row+1, end_column=right_start_col+7)
+    c_r2 = ws.cell(_footer_row+1, right_start_col); c_r2.value = "統一編號："; c_r2.font = Font(name=FONT_MAIN, size=12); c_r2.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+    ws.merge_cells(start_row=_footer_row+2, start_column=right_start_col, end_row=_footer_row+2, end_column=right_start_col+7)
+    c_r3 = ws.cell(_footer_row+2, right_start_col); c_r3.value = "客戶簽章："; c_r3.font = Font(name=FONT_MAIN, size=12); c_r3.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
 
-    for c_idx in range(1, total_cols + 1): set_border(ws.cell(sig_start, c_idx), top=BS_THIN)
+    for c_idx in range(1, total_cols + 1): set_border(ws.cell(_footer_row, c_idx), top=BS_THIN)
     return curr_row + 3
 
 def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name, product_name, remarks_list):
@@ -484,11 +486,11 @@ def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod, client_n
     ws.merge_cells(f"{get_column_letter(end_c_start+1)}5:{get_column_letter(total_cols)}5")
     c5_r = ws[f"{get_column_letter(end_c_start+1)}5"]; c5_r.value = period_str; c5_r.font = FONT_14; c5_r.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True) 
     
-    draw_outer_border_fast(ws, 5, 5, 1, total_cols)
+    apply_outer_border(ws, 5, 5, 1, total_cols)
 
     ws.merge_cells(f"A6:{get_column_letter(total_cols)}6")
     c6 = ws['A6']; c6.value = f"廣告名稱：{product_name}"; c6.font = FONT_14; c6.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-    draw_outer_border_fast(ws, 6, 6, 1, total_cols)
+    apply_outer_border(ws, 6, 6, 1, total_cols)
     
     headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
     for i, h in enumerate(headers):
@@ -558,8 +560,8 @@ def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod, client_n
             ws.cell(curr_row, 2, r['region']).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             p_num = int(r.get('program_num', 0)); total_store_count += p_num 
             suffix = "面" if m_key == "新鮮視" else "店"
-            ws.cell(curr_row, 3, f"{p_num:,}{suffix}").alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            ws.cell(curr_row, 4, r['daypart']).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            ws.cell(curr_row, 3, f"{p_num:,}{suffix}").alignment = ALIGN_CENTER
+            ws.cell(curr_row, 4, r['daypart']).alignment = ALIGN_CENTER
             sec = r['seconds']
             if m_key == "新鮮視": sec_txt = f"{sec}秒\n影片/影像 1920x1080 (mp4)"
             else: sec_txt = f"{sec}秒廣告"
@@ -568,8 +570,8 @@ def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod, client_n
             for d_idx in range(eff_days):
                 if d_idx < len(r['schedule']):
                     val = r['schedule'][d_idx]; row_sum += val
-                    c = ws.cell(curr_row, 6+d_idx); c.value = val; c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); c.font = Font(name=FONT_MAIN, size=12); c.border = BORDER_ALL_THIN
-            ws.cell(curr_row, end_c_start, row_sum).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                    c = ws.cell(curr_row, 6+d_idx); c.value = val; c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); c.font = FONT_STD; c.border = BORDER_ALL_THIN
+            ws.cell(curr_row, end_c_start, row_sum).alignment = ALIGN_CENTER
             rate_val = r['rate_display']
             if isinstance(rate_val, (int, float)): total_list_sum += rate_val
             ws.cell(curr_row, end_c_start+1, rate_val).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True) 
@@ -577,12 +579,12 @@ def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod, client_n
             if r.get('is_pkg_member'): pkg = r['nat_pkg_display'] if idx == 0 else None
             ws.cell(curr_row, end_c_start+2, pkg).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             for c_idx in range(1, total_cols + 1):
-                c = ws.cell(curr_row, c_idx); c.font = Font(name=FONT_MAIN, size=12); c.border = BORDER_ALL_THIN
+                c = ws.cell(curr_row, c_idx); c.font = FONT_STD; c.border = BORDER_ALL_THIN
             set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
             curr_row += 1
         ws.merge_cells(start_row=start_merge, start_column=1, end_row=curr_row-1, end_column=1)
         if data[0].get('is_pkg_member'): ws.merge_cells(start_row=start_merge, start_column=end_c_start+2, end_row=curr_row-1, end_column=end_c_start+2)
-        draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
+        apply_outer_border(ws, start_merge, curr_row-1, 1, total_cols)
 
     # Total Row
     ws.row_dimensions[curr_row].height = 40
@@ -595,7 +597,7 @@ def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod, client_n
     ws.cell(curr_row, end_c_start+1, total_list_sum).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).font = Font(name=FONT_MAIN, size=14, bold=True); ws.cell(curr_row, end_c_start+1).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     ws.cell(curr_row, end_c_start+2, budget).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).font = Font(name=FONT_MAIN, size=14, bold=True); ws.cell(curr_row, end_c_start+2).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
-    draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
+    apply_outer_border(ws, curr_row, curr_row, 1, total_cols)
     for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
     set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
     curr_row += 1
@@ -604,8 +606,8 @@ def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod, client_n
     footer_stack = [("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
     for lbl, val in footer_stack:
         ws.row_dimensions[curr_row].height = 30
-        c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = Alignment(horizontal='right', vertical='center', wrap_text=True); c_l.font = Font(name=FONT_MAIN, size=12)
-        c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); c_v.font = Font(name=FONT_MAIN, size=14, bold=True)
+        c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = Alignment(horizontal='right', vertical='center', wrap_text=True); c_l.font = FONT_STD
+        c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); c_v.font = FONT_BOLD 
         t, b, l, r = BS_THIN, BS_THIN, BS_MEDIUM, BS_THIN
         if lbl == "Grand Total": b = BS_MEDIUM 
         c_l.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
@@ -627,24 +629,27 @@ def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod, client_n
         if is_blue: color = "0000FF"
         c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
-    sig_start = curr_row - len(remarks_list)
-    sig_col_start = max(1, total_cols - 8)
-    ws.cell(sig_start, sig_col_start).value = "乙      方："
-    ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
+    _footer_row = curr_row - len(remarks_list)
+    _footer_col = max(1, total_cols - 8)
     
-    ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
-    ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+    ws.cell(_footer_row, _footer_col).value = "乙      方："
+    ws.cell(_footer_row, _footer_col).font = Font(name=FONT_MAIN, size=16) 
     
-    ws.cell(sig_start+2, sig_col_start).value = "統一編號："
-    ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+    ws.cell(_footer_row+1, _footer_col+1).value = f"{client_name}"
+    ws.cell(_footer_row+1, _footer_col+1).font = Font(name=FONT_MAIN, size=16)
     
-    ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
-    ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+    ws.cell(_footer_row+2, _footer_col).value = "統一編號："
+    ws.cell(_footer_row+2, _footer_col).font = Font(name=FONT_MAIN, size=16)
+    
+    ws.cell(_footer_row+3, _footer_col).value = "客戶簽章："
+    ws.cell(_footer_row+3, _footer_col).font = Font(name=FONT_MAIN, size=16)
 
-    return curr_row + 3
+    target_border_row = curr_row + 2
+    for c_idx in range(1, total_cols + 1):
+        ws.cell(target_border_row, c_idx).border = Border(bottom=Side(style='double'))
+    return target_border_row
 
 def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name, product_name, remarks_list):
-    SIDE_DOUBLE = Side(style='double')
     logo_bytes = get_cloud_logo_bytes()
     
     eff_days = (end_dt - start_dt).days + 1
@@ -692,7 +697,7 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
     c4f = ws['F4']; c4f.value = f"廣告規格：{sec_str}"; c4f.font = Font(name=FONT_MAIN, size=14, bold=True); c4f.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
     ws.merge_cells(f"{get_column_letter(end_c_start+1)}4:{get_column_letter(total_cols)}4")
     c4_r = ws[f"{get_column_letter(end_c_start+1)}4"]; c4_r.value = period_str; c4_r.font = Font(name=FONT_MAIN, size=14, bold=True); c4_r.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-    draw_outer_border_fast(ws, 4, 4, 1, total_cols)
+    apply_outer_border(ws, 4, 4, 1, total_cols)
 
     c5a = ws['A5']; c5a.value = "廣告名稱："; c5a.font = Font(name=FONT_MAIN, size=14, bold=True); c5a.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
     ws.merge_cells("B5:E5"); c5b = ws['B5']; c5b.value = product_name; c5b.font = Font(name=FONT_MAIN, size=14, bold=True); c5b.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
@@ -717,14 +722,14 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
         if c_idx == 5: r = None
         c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
-    draw_outer_border_fast(ws, 5, 5, 1, 5) 
+    apply_outer_border(ws, 5, 5, 1, 5) 
 
     header_start_row = 6
     headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
     for i, h in enumerate(headers):
         c_idx = i + 1
         ws.merge_cells(start_row=header_start_row, start_column=c_idx, end_row=header_start_row+1, end_column=c_idx)
-        c = ws.cell(header_start_row, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c = ws.cell(header_start_row, c_idx); c.value = h; c.font = Font(name=FONT_MAIN, size=14, bold=True); c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
         t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
         if c_idx == 1: l = BS_MEDIUM
         c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
@@ -733,10 +738,10 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
     curr = start_dt
     for i in range(eff_days):
         col_idx = 6 + i
-        c6 = ws.cell(header_start_row, col_idx); c6.value = curr.day; c6.font = FONT_BOLD; c6.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); c6.border = BORDER_ALL_MEDIUM
+        c6 = ws.cell(header_start_row, col_idx); c6.value = curr.day; c6.font = FONT_BOLD; c6.alignment = ALIGN_CENTER; c6.border = BORDER_ALL_MEDIUM
         c6.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
         c7 = ws.cell(header_start_row+1, col_idx); c7.value = ["日","一","二","三","四","五","六"][(curr.weekday()+1)%7]
-        c7.font = FONT_BOLD; c7.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c7.font = FONT_BOLD; c7.alignment = ALIGN_CENTER
         c7.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
         if curr.weekday() >= 5: c7.fill = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
         curr += timedelta(days=1)
@@ -745,7 +750,7 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
     for i, h in enumerate(end_headers):
         c_idx = end_c_start + i
         ws.merge_cells(start_row=header_start_row, start_column=c_idx, end_row=header_start_row+1, end_column=c_idx)
-        c = ws.cell(header_start_row, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        c = ws.cell(header_start_row, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
         t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
         if c_idx == total_cols: r = BS_MEDIUM
         c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
@@ -757,7 +762,7 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
         c7.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
         if c_idx == date_start_col: set_border(c7, left=BS_MEDIUM)
         if c_idx == total_cols: set_border(c7, right=BS_MEDIUM)
-        c8 = ws.cell(8, c_idx)
+        c8 = ws.cell(header_start_row+1, c_idx)
         c8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
         if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
         if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
@@ -778,7 +783,7 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
             ws.cell(curr_row, 2, r['region']).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             p_num = int(r.get('program_num', 0)); total_store_count += p_num 
             suffix = "面" if m_key == "新鮮視" else "店"
-            ws.cell(curr_row, 3, f"{p_num:,}{suffix}").alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            ws.cell(curr_row, 3, f"{p_num:,}{suffix}").alignment = ALIGN_CENTER
             ws.cell(curr_row, 4, r['daypart']).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             sec = r['seconds']
             if m_key == "新鮮視": sec_txt = f"{sec}秒\n影片/影像 1920x1080 (mp4)"
@@ -802,7 +807,7 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
             curr_row += 1
         ws.merge_cells(start_row=start_merge, start_column=1, end_row=curr_row-1, end_column=1)
         if data[0].get('is_pkg_member'): ws.merge_cells(start_row=start_merge, start_column=end_c_start+2, end_row=curr_row-1, end_column=end_c_start+2)
-        draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
+        apply_outer_border(ws, start_merge, curr_row-1, 1, total_cols)
 
     ws.row_dimensions[curr_row].height = 40
     ws.cell(curr_row, 3, total_store_count).number_format = FMT_NUMBER; ws.cell(curr_row, 3).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); ws.cell(curr_row, 3).font = Font(name=FONT_MAIN, size=14, bold=True)
@@ -814,7 +819,7 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
     ws.cell(curr_row, end_c_start+1, total_list_sum).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).font = Font(name=FONT_MAIN, size=14, bold=True); ws.cell(curr_row, end_c_start+1).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     ws.cell(curr_row, end_c_start+2, budget).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+2).font = Font(name=FONT_MAIN, size=14, bold=True); ws.cell(curr_row, end_c_start+2).alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     for c_idx in range(1, total_cols+1): ws.cell(curr_row, c_idx).border = BORDER_ALL_THIN
-    draw_outer_border_fast(ws, curr_row, curr_row, 1, total_cols)
+    apply_outer_border(ws, curr_row, curr_row, 1, total_cols)
     for c_idx in range(1, total_cols+1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
     set_border(ws.cell(curr_row, 5), right=BS_MEDIUM)
     curr_row += 1
@@ -823,8 +828,8 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
     footer_stack = [("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
     for lbl, val in footer_stack:
         ws.row_dimensions[curr_row].height = 30
-        c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = Alignment(horizontal='right', vertical='center', wrap_text=True); c_l.font = Font(name=FONT_MAIN, size=12)
-        c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); c_v.font = Font(name=FONT_MAIN, size=14, bold=True)
+        c_l = ws.cell(curr_row, end_c_start+1); c_l.value = lbl; c_l.alignment = Alignment(horizontal='right', vertical='center', wrap_text=True); c_l.font = FONT_STD
+        c_v = ws.cell(curr_row, end_c_start+2); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True); c_v.font = FONT_BOLD 
         t, b, l, r = BS_THIN, BS_THIN, BS_MEDIUM, BS_THIN
         if lbl == "Grand Total": b = BS_MEDIUM 
         c_l.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
@@ -837,10 +842,12 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
     
     curr_row += 1
     
+    # 1. Remarks Header
     remarks_header_row = curr_row
     ws.cell(remarks_header_row, 6).value = "Remarks："
     ws.cell(remarks_header_row, 6).font = Font(name=FONT_MAIN, size=16, bold=True)
 
+    # 2. Remarks Body
     current_remark_row = remarks_header_row
     for rm in remarks_list:
         current_remark_row += 1
@@ -851,29 +858,222 @@ def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name
 
     remarks_end_row = current_remark_row
 
-    sig_start_row = remarks_header_row 
-    sig_col_start = 1
+    # 3. Signature Block (Left Side)
+    _sig_start_row = remarks_header_row 
+    _sig_col_start = 1
     
-    ws.cell(sig_start_row, sig_col_start).value = "乙      方："
-    ws.cell(sig_start_row, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
+    ws.cell(_sig_start_row, _sig_col_start).value = "乙      方："
+    ws.cell(_sig_start_row, _sig_col_start).font = Font(name=FONT_MAIN, size=16) 
     
-    ws.cell(sig_start_row + 1, sig_col_start + 1).value = client_name 
-    ws.cell(sig_start_row + 1, sig_col_start + 1).font = Font(name=FONT_MAIN, size=16)
+    ws.cell(_sig_start_row + 1, _sig_col_start + 1).value = client_name 
+    ws.cell(_sig_start_row + 1, _sig_col_start + 1).font = Font(name=FONT_MAIN, size=16)
     
-    ws.cell(sig_start_row + 2, sig_col_start).value = "統一編號："
-    ws.cell(sig_start_row + 2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+    ws.cell(_sig_start_row + 2, _sig_col_start).value = "統一編號："
+    ws.cell(_sig_start_row + 2, _sig_col_start).font = Font(name=FONT_MAIN, size=16)
     
-    ws.cell(sig_start_row + 2, sig_col_start + 2).value = "" 
-    ws.cell(sig_start_row + 2, sig_col_start + 2).font = Font(name=FONT_MAIN, size=16)
+    ws.cell(_sig_start_row + 2, _sig_col_start + 2).value = "" 
+    ws.cell(_sig_start_row + 2, _sig_col_start + 2).font = Font(name=FONT_MAIN, size=16)
     
-    ws.cell(sig_start_row + 3, sig_col_start).value = "客戶簽章："
-    ws.cell(sig_start_row + 3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+    ws.cell(_sig_start_row + 3, _sig_col_start).value = "客戶簽章："
+    ws.cell(_sig_start_row + 3, _sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
+    # 4. Double Bottom Border
     final_border_row = remarks_end_row + 2
     for c_idx in range(1, total_cols + 1):
-        ws.cell(final_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
+        ws.cell(final_border_row, c_idx).border = Border(bottom=Side(style='double'))
 
     return final_border_row
+
+def main():
+    try:
+        with st.spinner("正在讀取 Google 試算表設定檔..."):
+            STORE_COUNTS, STORE_COUNTS_NUM, PRICING_DB, SEC_FACTORS, err_msg = load_config_from_cloud(GSHEET_SHARE_URL)
+        if err_msg:
+            st.error(f"❌ 設定檔載入失敗: {err_msg}")
+            st.stop()
+        
+        with st.sidebar:
+            st.header("🕵️ 主管登入")
+            if not st.session_state.is_supervisor:
+                pwd = st.text_input("輸入密碼", type="password", key="pwd_input")
+                if st.button("登入"):
+                    if pwd == "1234": st.session_state.is_supervisor = True; st.rerun()
+                    else: st.error("密碼錯誤")
+            else:
+                st.success("✅ 目前狀態：主管模式"); 
+                if st.button("登出"): st.session_state.is_supervisor = False; st.rerun()
+            st.markdown("---")
+            if st.button("🧹 清除快取"): st.cache_data.clear(); st.rerun()
+
+        st.title("📺 媒體 Cue 表生成器 (v111.45 Stable)")
+        format_type = st.radio("選擇格式", ["Dongwu", "Shenghuo", "Bolin"], horizontal=True)
+
+        c1, c2, c3, c4, c5_sales = st.columns(5)
+        with c1: client_name = st.text_input("客戶名稱", "萬國通路")
+        with c2: product_name = st.text_input("產品名稱", "統一布丁")
+        with c3: total_budget_input = st.number_input("總預算 (未稅 Net)", value=1000000, step=10000)
+        with c4: prod_cost_input = st.number_input("製作費 (未稅)", value=0, step=1000)
+        with c5_sales: sales_person = st.text_input("業務名稱", "")
+
+        final_budget_val = total_budget_input
+        if st.session_state.is_supervisor:
+            st.markdown("---")
+            col_sup1, col_sup2 = st.columns([1, 2])
+            with col_sup1: st.error("🔒 [主管] 專案優惠價覆寫")
+            with col_sup2:
+                override_val = st.number_input("輸入最終成交價", value=total_budget_input)
+                if override_val != total_budget_input: final_budget_val = override_val; st.caption(f"⚠️ 使用 ${final_budget_val:,} 結算")
+            st.markdown("---")
+
+        c5, c6 = st.columns(2)
+        with c5: start_date = st.date_input("開始日", datetime(2026, 1, 1))
+        with c6: end_date = st.date_input("結束日", datetime(2026, 1, 31))
+        days_count = (end_date - start_date).days + 1
+        st.info(f"📅 走期共 **{days_count}** 天")
+
+        with st.expander("📝 備註欄位設定", expanded=False):
+            rc1, rc2, rc3 = st.columns(3)
+            sign_deadline = rc1.date_input("回簽截止日", datetime.now() + timedelta(days=3))
+            billing_month = rc2.text_input("請款月份", "2026年2月")
+            payment_date = rc3.date_input("付款兌現日", datetime(2026, 3, 31))
+
+        st.markdown("### 3. 媒體投放設定")
+        col_cb1, col_cb2, col_cb3 = st.columns(3)
+        
+        def on_media_change():
+            active = []
+            if st.session_state.get("cb_rad"): active.append("rad_share")
+            if st.session_state.get("cb_fv"): active.append("fv_share")
+            if st.session_state.get("cb_cf"): active.append("cf_share")
+            if not active: return
+            share = 100 // len(active)
+            for key in active: st.session_state[key] = share
+            rem = 100 - sum([st.session_state[k] for k in active])
+            st.session_state[active[0]] += rem
+
+        def on_slider_change(changed_key):
+            active = []
+            if st.session_state.get("cb_rad"): active.append("rad_share")
+            if st.session_state.get("cb_fv"): active.append("fv_share")
+            if st.session_state.get("cb_cf"): active.append("cf_share")
+            others = [k for k in active if k != changed_key]
+            if not others: st.session_state[changed_key] = 100
+            elif len(others) == 1:
+                val = st.session_state[changed_key]
+                st.session_state[others[0]] = max(0, 100 - val)
+            elif len(others) == 2:
+                val = st.session_state[changed_key]
+                rem = max(0, 100 - val)
+                k1, k2 = others[0], others[1]
+                sum_others = st.session_state[k1] + st.session_state[k2]
+                if sum_others == 0: st.session_state[k1] = rem // 2; st.session_state[k2] = rem - st.session_state[k1]
+                else:
+                    ratio = st.session_state[k1] / sum_others
+                    st.session_state[k1] = int(rem * ratio)
+                    st.session_state[k2] = rem - st.session_state[k1]
+
+        is_rad = col_cb1.checkbox("全家廣播", key="cb_rad", on_change=on_media_change)
+        is_fv = col_cb2.checkbox("新鮮視", key="cb_fv", on_change=on_media_change)
+        is_cf = col_cb3.checkbox("家樂福", key="cb_cf", on_change=on_media_change)
+
+        m1, m2, m3 = st.columns(3)
+        config = {}
+        
+        if is_rad:
+            with m1:
+                st.markdown("#### 📻 全家廣播")
+                is_nat = st.checkbox("全省聯播", True, key="rad_nat")
+                regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=REGIONS_ORDER, key="rad_reg")
+                if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
+                secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
+                st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
+                sec_shares = {}
+                if len(secs) > 1:
+                    rem = 100; sorted_secs = sorted(secs)
+                    for i, s in enumerate(sorted_secs):
+                        if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}"); sec_shares[s] = v; rem -= v
+                        else: sec_shares[s] = rem
+                elif secs: sec_shares[secs[0]] = 100
+                config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
+
+        if is_fv:
+            with m2:
+                st.markdown("#### 📺 新鮮視")
+                is_nat = st.checkbox("全省聯播", False, key="fv_nat")
+                regs = ["全省"] if is_nat else st.multiselect("區域", REGIONS_ORDER, default=["北區"], key="fv_reg")
+                if not is_nat and len(regs) == 6: is_nat = True; regs = ["全省"]; st.info("✅ 已選滿6區，自動轉為全省聯播")
+                secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
+                st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
+                sec_shares = {}
+                if len(secs) > 1:
+                    rem = 100; sorted_secs = sorted(secs)
+                    for i, s in enumerate(sorted_secs):
+                        if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}"); sec_shares[s] = v; rem -= v
+                        else: sec_shares[s] = rem
+                elif secs: sec_shares[secs[0]] = 100
+                config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
+
+        if is_cf:
+            with m3:
+                st.markdown("#### 🛒 家樂福")
+                secs = st.multiselect("秒數", DURATIONS, [20], key="cf_sec")
+                st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
+                sec_shares = {}
+                if len(secs) > 1:
+                    rem = 100; sorted_secs = sorted(secs)
+                    for i, s in enumerate(sorted_secs):
+                        if i < len(sorted_secs) - 1: v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"cs_{s}"); sec_shares[s] = v; rem -= v
+                        else: sec_shares[s] = rem
+                elif secs: sec_shares[secs[0]] = 100
+                config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
+
+        if config:
+            rows, total_list_accum, logs = calculate_plan_data(config, total_budget_input, days_count, PRICING_DB, SEC_FACTORS, STORE_COUNTS_NUM, REGIONS_ORDER)
+            prod_cost = prod_cost_input 
+            vat = int(round(final_budget_val * 0.05))
+            grand_total = final_budget_val + vat
+            p_str = f"{'、'.join([f'{s}秒' for s in sorted(list(set(r['seconds'] for r in rows)))])} {product_name}"
+            rem = get_remarks_text(sign_deadline, billing_month, payment_date)
+            html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
+            
+            st.components.v1.html(html_preview, height=700, scrolling=True)
+            
+            st.markdown("---")
+            st.subheader("📥 檔案下載區")
+            
+            # --- 直覺式下載 ---
+            xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
+            
+            col_dl1, col_dl2 = st.columns(2)
+            
+            with col_dl2:
+                pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
+                if pdf_bytes:
+                    st.download_button(
+                        f"📥 下載 PDF", 
+                        pdf_bytes, 
+                        f"Cue_{safe_filename(client_name)}.pdf", 
+                        key="pdf_dl_btn",
+                        mime="application/pdf"
+                    )
+                else:
+                    st.warning(f"PDF 生成失敗: {err}")
+
+            with col_dl1:
+                if st.session_state.is_supervisor:
+                    st.download_button(
+                        "📥 下載 Excel (主管權限)", 
+                        xlsx_temp, 
+                        f"Cue_{safe_filename(client_name)}.xlsx", 
+                        key="xlsx_dl_btn",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                else:
+                    st.info("🔒 Excel 下載功能僅限主管使用")
+
+    except Exception as e:
+        st.error("程式執行發生錯誤，請聯絡開發者。")
+        st.error(traceback.format_exc())
 
 if __name__ == "__main__":
     main()
