@@ -8,7 +8,7 @@ import requests
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.37 (Final Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.38 (Stable)")
 
 import pandas as pd
 import math
@@ -638,21 +638,18 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             curr_row += 1
         
         curr_row += 1
-        start_footer = curr_row # [NOTE] This variable name is kept here to match legacy, but logic below uses new variable name to avoid confusion
-        
-        r_col_start = 6 
-        ws.cell(start_footer, r_col_start).value = "Remarks："
-        ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
-        r_row = start_footer
+        ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True)
         for rm in remarks_list:
-            r_row += 1
+            curr_row += 1
+            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
+            is_blue = rm.strip().startswith("6.")
             color = "000000"
-            if rm.strip().startswith("1.") or rm.strip().startswith("4."): color = "FF0000"
-            if rm.strip().startswith("6."): color = "0000FF"
-            c = ws.cell(r_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+            if is_red: color = "FF0000"
+            if is_blue: color = "0000FF"
+            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         # -------------------------------------------------------------
-        # [CRITICAL FIX] Signature Block Variable Name Correction
+        # [CRITICAL FIX] Signature Block Variable Name Correction (v111.37)
         # -------------------------------------------------------------
         sig_start = curr_row - len(remarks_list)
         sig_col_start = 1
@@ -668,13 +665,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         # (2) Tax ID Blank
         ws.cell(sig_start+2, sig_col_start+2).value = "" 
-        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16) # Corrected to sig_start
+        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16) 
         
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         # (3) Double Border below Remark 6 + 2 rows
-        target_border_row = r_row + 2
+        target_border_row = curr_row + 2
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
 
