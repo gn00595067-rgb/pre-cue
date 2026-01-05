@@ -806,7 +806,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0 
         ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0 
         
-        ROW_H_MAP = {1:30, 2:30, 3:46, 4:46, 5:40, 6:40, 7:35, 8:35}
+        ROW_H_MAP = {1:30, 2:30, 3:46, 4:46, 5:40, 6:40, 7:35, 8:35, 9:35} # Added Row 9 height
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
         
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1")
@@ -842,15 +842,16 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         c6 = ws['A6']; c6.value = f"廣告名稱：{product_name}"; c6.font = FONT_14; c6.alignment = ALIGN_LEFT
         draw_outer_border_fast(ws, 6, 6, 1, total_cols)
         
+        # Headers: Merge from 7 to 9
         headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
         for i, h in enumerate(headers):
             c_idx = i + 1
-            ws.merge_cells(start_row=7, start_column=c_idx, end_row=8, end_column=c_idx)
+            ws.merge_cells(start_row=7, start_column=c_idx, end_row=9, end_column=c_idx)
             c = ws.cell(7, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
             t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
             if c_idx == 1: l = BS_MEDIUM
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
-            ws.cell(8, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
+            ws.cell(9, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
 
         curr = start_dt
         month_groups = []
@@ -862,6 +863,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             else:
                 month_groups[-1][2] = i
         
+        # Row 7: Month
         for m_key, s_idx, e_idx in month_groups:
             start_col = 6 + s_idx
             end_col = 6 + e_idx
@@ -873,19 +875,28 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         curr = start_dt
         for i in range(eff_days):
             col_idx = 6 + i
-            c = ws.cell(8, col_idx); c.value = curr.day; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
-            if curr.weekday() >= 5: c.fill = FILL_WEEKEND
+            # Row 8: Day
+            c8 = ws.cell(8, col_idx); c8.value = curr.day; c8.font = FONT_BOLD; c8.alignment = ALIGN_CENTER; c8.border = BORDER_ALL_MEDIUM
+            # Row 9: Weekday (Fixed!)
+            c9 = ws.cell(9, col_idx); c9.value = ["日","一","二","三","四","五","六"][(curr.weekday()+1)%7]
+            c9.font = FONT_BOLD; c9.alignment = ALIGN_CENTER; c9.border = BORDER_ALL_MEDIUM
+            
+            if curr.weekday() >= 5: 
+                c8.fill = FILL_WEEKEND
+                c9.fill = FILL_WEEKEND
+                
             curr += timedelta(days=1)
 
+        # End Headers: Merge 7 to 9
         end_headers = ["檔次", "定價", "專案價"]
         for i, h in enumerate(end_headers):
             c_idx = end_c_start + i
-            ws.merge_cells(start_row=7, start_column=c_idx, end_row=8, end_column=c_idx)
+            ws.merge_cells(start_row=7, start_column=c_idx, end_row=9, end_column=c_idx)
             c = ws.cell(7, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
             t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
             if c_idx == total_cols: r = BS_MEDIUM
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
-            ws.cell(8, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
+            ws.cell(9, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
 
         date_start_col = 6
         for c_idx in range(date_start_col, total_cols + 1):
@@ -893,12 +904,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c7.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if c_idx == date_start_col: set_border(c7, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c7, right=BS_MEDIUM)
-            c8 = ws.cell(8, c_idx)
-            c8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
-            if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
-            if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
+            
+            c9 = ws.cell(9, c_idx)
+            c9.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+            if c_idx == date_start_col: set_border(c9, left=BS_MEDIUM)
+            if c_idx == total_cols: set_border(c9, right=BS_MEDIUM)
 
-        curr_row = 9
+        curr_row = 10 # Adjusted start row due to added Weekday row
         grouped_data = {"全家廣播": sorted([r for r in rows if r["media"]=="全家廣播"], key=lambda x:x['seconds']),
                         "新鮮視": sorted([r for r in rows if r["media"]=="新鮮視"], key=lambda x:x['seconds']),
                         "家樂福": sorted([r for r in rows if r["media"]=="家樂福"], key=lambda x:x['seconds'])}
@@ -1013,7 +1025,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         sig_start = curr_row - len(remarks_list)
         # [MODIFIED] Party B info anchored to column 14 (N)
-        sig_col_start = 14 
+        sig_col_start = 14
         
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
@@ -1022,7 +1034,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         ws.cell(sig_start+2, sig_col_start+2).value = "" 
-        ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
@@ -1249,17 +1261,19 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         sig_start = curr_row - len(remarks_list)
-        sig_col_start = 1
-        ws.cell(sig_start, sig_col_start).value = "乙      方："
-        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(sig_start+1, sig_col_start+1).value = client_name 
+        # [MODIFIED] Party B info anchored to column 14 (N)
+        sig_col_start = 14 
+        
+        ws.cell(sig_start, sig_col_start).value = "乙      方："
+        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
+        ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         ws.cell(sig_start+2, sig_col_start+2).value = "" 
-        ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
