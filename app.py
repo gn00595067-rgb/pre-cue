@@ -207,7 +207,7 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
         gc.collect()
 
 # =========================================================
-# HTML 預覽生成 (Final Adjusted Version)
+# HTML 預覽生成 (White Background Fix)
 # =========================================================
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
     eff_days = days_cnt
@@ -296,13 +296,13 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     # Construct Total Row (Bottom)
     total_row_html = "<tr>"
     
-    # 1. Merge Text Columns (Station, Loc, Prog, Daypart, Size) - Columns 0-4
+    # 1. Merge Text Columns
     total_row_html += f"<td colspan='5' style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>Total</td>"
     
-    # 2. Rate (Net) Total - Column 5 (total_list)
+    # 2. Rate (Net) Total
     total_row_html += f"<td style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>${total_list:,}</td>"
     
-    # 3. Package-cost (Net) Total - Column 6 (budget / override)
+    # 3. Package-cost (Net) Total
     total_row_html += f"<td style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>${budget:,}</td>"
     
     # 4. Daily Totals
@@ -321,11 +321,12 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     vat = int(round(budget * 0.05))
     footer_html = f"<div style='margin-top:10px; font-weight:bold; text-align:right;'>製作費: ${prod:,}<br>5% VAT: ${vat:,}<br>Grand Total: ${grand_total:,}</div>"
     
-    # Inline CSS styles
+    # Inline CSS styles - Modified for Mobile Visibility
+    # Added: background-color: #ffffff; color: #000000; to body to force white background on mobile
     css = """
-    body { font-family: sans-serif; font-size: 10px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }
+    body { font-family: sans-serif; font-size: 10px; background-color: #ffffff; color: #000000; padding: 5px; }
+    table { border-collapse: collapse; width: 100%; background-color: #ffffff; }
+    th, td { border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; color: #000000; }
     .bg-dw-head { background-color: #4472C4; color: white; }
     .bg-sh-head { background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }
     .bg-bolin-head { background-color: #F8CBAD; color: black; }
