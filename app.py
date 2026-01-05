@@ -1012,8 +1012,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         sig_start = curr_row - len(remarks_list)
-        # [MODIFIED] Party B info anchored to column 13 (M)
-        sig_col_start = 13 
+        # [MODIFIED] Party B info anchored to column 14 (N)
+        sig_col_start = 14 
         
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
@@ -1021,10 +1021,17 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+2, sig_col_start+2).value = "" 
+        ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
+        
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
-        return curr_row + 3
+        target_border_row = r_row + 2
+        for c_idx in range(1, total_cols + 1):
+            ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
+
+        return target_border_row
 
     # ---------------------------------------------------------
     # Sub-Engine: Bolin
@@ -1229,35 +1236,33 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             curr_row += 1
         
         curr_row += 1
-        start_footer = curr_row
-        
-        r_col_start = 6 
-        ws.row_dimensions[start_footer].height = 25 # Fix Remarks Title Height
-        ws.cell(start_footer, r_col_start).value = "Remarks："
-        ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
-        r_row = start_footer
+        ws.row_dimensions[curr_row].height = 25 # Fix Remarks Title Height
+        ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True)
         for rm in remarks_list:
-            r_row += 1
-            ws.row_dimensions[r_row].height = 25 # Fix Remarks Content Height
+            curr_row += 1
+            ws.row_dimensions[curr_row].height = 25 # Fix Remarks Content Height
+            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
+            is_blue = rm.strip().startswith("6.")
             color = "000000"
-            if rm.strip().startswith("1.") or rm.strip().startswith("4."): color = "FF0000"
-            if rm.strip().startswith("6."): color = "0000FF"
-            c = ws.cell(r_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+            if is_red: color = "FF0000"
+            if is_blue: color = "0000FF"
+            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
+        sig_start = curr_row - len(remarks_list)
         sig_col_start = 1
-        ws.cell(start_footer, sig_col_start).value = "乙      方："
-        ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start, sig_col_start).value = "乙      方："
+        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(start_footer+1, sig_col_start+1).value = client_name 
-        ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+1, sig_col_start+1).value = client_name 
+        ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(start_footer+2, sig_col_start).value = "統一編號："
-        ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(start_footer+2, sig_col_start+2).value = "" 
+        ws.cell(sig_start+2, sig_col_start).value = "統一編號："
+        ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
-        ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
+        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         target_border_row = r_row + 2
         for c_idx in range(1, total_cols + 1):
