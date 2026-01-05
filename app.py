@@ -879,7 +879,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws.cell(8, col_idx)
             
             # 2. 組合「日期」+「換行」+「星期幾」
-            # 這樣顯示出來就會像鉑霖一樣，上面是數字，下面是星期
             wk_str = week_list[curr.weekday()]
             c.value = f"{curr.day}\n{wk_str}"
             
@@ -1019,16 +1018,22 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for rm in remarks_list:
             curr_row += 1
             ws.row_dimensions[curr_row].height = 25 # Fix Remarks Content Height
+            
+            # [MODIFIED] Merge cells for Remarks to prevent overlapping
+            ws.merge_cells(start_row=curr_row, start_column=1, end_row=curr_row, end_column=total_cols)
+            
             is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
             is_blue = rm.strip().startswith("6.")
             color = "000000"
             if is_red: color = "FF0000"
             if is_blue: color = "0000FF"
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+            c.alignment = ALIGN_LEFT # Ensure left alignment
 
         sig_start = curr_row - len(remarks_list)
-        # [MODIFIED] Party B info anchored to column 16 
-        sig_col_start = 16
+        
+        # [MODIFIED] Party B info anchored to dynamic "Project Price" column (end_c_start + 2)
+        sig_col_start = end_c_start + 2
         
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
