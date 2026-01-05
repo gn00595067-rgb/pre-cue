@@ -890,7 +890,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             
             if curr.weekday() >= 5: 
                 c.fill = FILL_WEEKEND
-            curr += timedelta(days=1)1)
+            curr += timedelta(days=1)
 
         end_headers = ["檔次", "定價", "專案價"]
         for i, h in enumerate(end_headers):
