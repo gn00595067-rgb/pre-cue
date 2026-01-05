@@ -766,6 +766,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
         draw_outer_border_fast(ws, 5, 5, 1, 5) 
+        # [手動修正] 因為上面的 draw_outer_border_fast 會強制畫上右框線，所以要在這裡手動移除 E5 的右邊線
+        ws.cell(5, 5).border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), right=Side(style=None))
 
         header_start_row = 6
         headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
