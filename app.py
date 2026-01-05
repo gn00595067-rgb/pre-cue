@@ -787,7 +787,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c6.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             c7 = ws.cell(header_start_row+1, col_idx); c7.value = ["日","一","二","三","四","五","六"][(curr.weekday()+1)%7]
             c7.font = FONT_BOLD; c7.alignment = ALIGN_CENTER
-            c7.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
+            style_left = BS_MEDIUM if col_idx == 6 else BS_THIN
+            c7.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=style_left), right=Side(style=BS_THIN))
             if curr.weekday() >= 5: c7.fill = FILL_WEEKEND
             curr += timedelta(days=1)
 
