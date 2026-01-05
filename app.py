@@ -788,7 +788,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # ---------------------------------------------------------
-    # Sub-Engine: Shenghuo
+    # Sub-Engine: Shenghuo (Updated based on user request)
     # ---------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -871,24 +871,20 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             set_border(ws.cell(7, start_col), left=BS_MEDIUM); set_border(ws.cell(7, end_col), right=BS_MEDIUM)
 
         curr = start_dt
-        # 1. 定義星期幾文字 (跟鉑霖一樣的中文格式)
+        
+        # [MODIFIED] Added week_list for Shenghuo
         week_list = ["一", "二", "三", "四", "五", "六", "日"]
 
         for i in range(eff_days):
             col_idx = 6 + i
             c = ws.cell(8, col_idx)
             
-            # 2. 組合「日期」+「換行」+「星期幾」
+            # [MODIFIED] Added week string
             wk_str = week_list[curr.weekday()]
             c.value = f"{curr.day}\n{wk_str}"
             
-            c.font = FONT_BOLD
-            # 這裡的 ALIGN_CENTER 已包含 wrap_text=True，所以換行會生效
-            c.alignment = ALIGN_CENTER
-            c.border = BORDER_ALL_MEDIUM
-            
-            if curr.weekday() >= 5: 
-                c.fill = FILL_WEEKEND
+            c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
+            if curr.weekday() >= 5: c.fill = FILL_WEEKEND
             curr += timedelta(days=1)
 
         end_headers = ["檔次", "定價", "專案價"]
@@ -1013,27 +1009,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             curr_row += 1
         
         curr_row += 1
-        ws.row_dimensions[curr_row].height = 25 # Fix Remarks Title Height
-        ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True)
-        for rm in remarks_list:
-            curr_row += 1
-            ws.row_dimensions[curr_row].height = 25 # Fix Remarks Content Height
-            
-            # [MODIFIED] Merge cells for Remarks to prevent overlapping
-            ws.merge_cells(start_row=curr_row, start_column=1, end_row=curr_row, end_column=total_cols)
-            
-            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
-            is_blue = rm.strip().startswith("6.")
-            color = "000000"
-            if is_red: color = "FF0000"
-            if is_blue: color = "0000FF"
-            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
-            c.alignment = ALIGN_LEFT # Ensure left alignment
-
-        sig_start = curr_row - len(remarks_list)
         
-        # [MODIFIED] Party B info anchored to dynamic "Project Price" column (end_c_start + 2)
-        sig_col_start = end_c_start + 2
+        # [MODIFIED] Swapped Remarks and Signature position
+        # Part 1: Signature Block (Moved to Top)
+        sig_start = curr_row
+        
+        # [MODIFIED] Party B info moved to Column 1 (Leftmost)
+        sig_col_start = 1
         
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
@@ -1043,8 +1025,36 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        
+        curr_row = sig_start + 4 # Move curr_row down after signature block
 
-        return curr_row + 3
+        # Part 2: Remarks Block (Moved to Bottom)
+        
+        # [MODIFIED] Remarks start from Column 6 (F column)
+        r_col_start = 6 
+        
+        ws.row_dimensions[curr_row].height = 25 
+        ws.cell(curr_row, r_col_start).value = "Remarks："
+        ws.cell(curr_row, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
+        
+        for rm in remarks_list:
+            curr_row += 1
+            ws.row_dimensions[curr_row].height = 25 
+            
+            # Note: No merge cells here as per previous working logic to avoid conflict
+            
+            is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
+            is_blue = rm.strip().startswith("6.")
+            color = "000000"
+            if is_red: color = "FF0000"
+            if is_blue: color = "0000FF"
+            c = ws.cell(curr_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+
+        target_border_row = curr_row + 2
+        for c_idx in range(1, total_cols + 1):
+            ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
+
+        return target_border_row
 
     # ---------------------------------------------------------
     # Sub-Engine: Bolin
