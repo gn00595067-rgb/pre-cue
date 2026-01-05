@@ -7,7 +7,7 @@ from itertools import groupby
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Tweaked)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Bolin Final)")
 
 import pandas as pd
 import math
@@ -443,10 +443,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for rm in remarks_list:
             curr_row += 1
             is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
-            is_blue = rm.strip().startswith("6.")
-            color = "000000"
-            if is_red: color = "FF0000"
-            if is_blue: color = "0000FF"
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=14, color="FF0000" if is_red else "000000")
 
         # --- v111.1: Signature Block (Polish) ---
@@ -486,7 +482,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0
         for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1
         ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5
-        ws.column_dimensions[get_column_letter(end_c_start+1)].width = 36.0 # Changed to 36.0
+        ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0
         ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0
         
         ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35}
@@ -544,7 +540,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == 1: l = BS_MEDIUM 
             if c_idx == total_cols: r = BS_MEDIUM 
             if c_idx == 6: l = None 
-            if c_idx == 5: r = None # Removed right border of B5 block
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
         draw_outer_border_fast(ws, 5, 5, 1, 5) 
