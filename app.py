@@ -8,7 +8,7 @@ import requests
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.28 (Bolin Final)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23+ (Bolin Mod)")
 
 import pandas as pd
 import math
@@ -175,91 +175,6 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     return f"<html><head><style>body {{ font-family: sans-serif; font-size: 10px; }} table {{ border-collapse: collapse; width: 100%; }} th, td {{ border: 0.5pt solid #000; padding: 4px; text-align: center; white-space: nowrap; }} .bg-dw-head {{ background-color: #4472C4; color: white; }} .bg-sh-head {{ background-color: white; color: black; font-weight: bold; border-bottom: 2px solid black; }} .bg-bolin-head {{ background-color: #F8CBAD; color: black; }} .bg-weekend {{ background-color: #FFFFCC; }}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
 
 # =========================================================
-# 5. 資料運算
-# =========================================================
-@st.cache_data(ttl=300)
-def load_config_from_cloud(share_url):
-    try:
-        match = re.search(r"/d/([a-zA-Z0-9-_]+)", share_url)
-        if not match: return None, None, None, None, "連結格式錯誤"
-        file_id = match.group(1)
-        def read_sheet(sheet_name):
-            url = f"https://docs.google.com/spreadsheets/d/{file_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
-            return pd.read_csv(url)
-        df_store = read_sheet("Stores"); df_store.columns = [c.strip() for c in df_store.columns]
-        store_counts = dict(zip(df_store['Key'], df_store['Display_Name'])); store_counts_num = dict(zip(df_store['Key'], df_store['Count']))
-        df_fact = read_sheet("Factors"); df_fact.columns = [c.strip() for c in df_fact.columns]
-        sec_factors = {}
-        for _, row in df_fact.iterrows():
-            if row['Media'] not in sec_factors: sec_factors[row['Media']] = {}
-            sec_factors[row['Media']][int(row['Seconds'])] = float(row['Factor'])
-        name_map = {"全家新鮮視": "新鮮視", "全家廣播": "全家廣播", "家樂福": "家樂福"}
-        for k, v in name_map.items():
-            if k in sec_factors and v not in sec_factors: sec_factors[v] = sec_factors[k]
-        df_price = read_sheet("Pricing"); df_price.columns = [c.strip() for c in df_price.columns]
-        pricing_db = {}
-        for _, row in df_price.iterrows():
-            m = row['Media']; r = row['Region']
-            if m == "家樂福":
-                if m not in pricing_db: pricing_db[m] = {}
-                pricing_db[m][r] = {"List": int(row['List_Price']), "Net": int(row['Net_Price']), "Std_Spots": int(row['Std_Spots']), "Day_Part": row['Day_Part']}
-            else:
-                if m not in pricing_db: pricing_db[m] = {"Std_Spots": int(row['Std_Spots']), "Day_Part": row['Day_Part']}
-                pricing_db[m][r] = [int(row['List_Price']), int(row['Net_Price'])]
-        return store_counts, store_counts_num, pricing_db, sec_factors, None
-    except Exception as e: return None, None, None, None, f"讀取失敗: {str(e)}"
-
-def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factors, store_counts_num, regions_order):
-    rows = []; total_list_accum = 0; debug_logs = []
-    for m, cfg in config.items():
-        m_budget_total = total_budget * (cfg["share"] / 100.0)
-        for sec, sec_pct in cfg["sec_shares"].items():
-            s_budget = m_budget_total * (sec_pct / 100.0)
-            if s_budget <= 0: continue
-            factor = get_sec_factor(m, sec, sec_factors)
-            if m in ["全家廣播", "新鮮視"]:
-                db = pricing_db[m]
-                calc_regs = ["全省"] if cfg["is_national"] else cfg["regions"]
-                display_regs = regions_order if cfg["is_national"] else cfg["regions"]
-                unit_net_sum = 0
-                for r in calc_regs: unit_net_sum += (db[r][1] / db["Std_Spots"]) * factor
-                if unit_net_sum == 0: continue
-                spots_init = math.ceil(s_budget / unit_net_sum); is_under_target = spots_init < db["Std_Spots"]
-                calc_penalty = 1.1 if is_under_target else 1.0 
-                if cfg["is_national"]: row_display_penalty = 1.0; total_display_penalty = 1.1 if is_under_target else 1.0
-                else: row_display_penalty = 1.1 if is_under_target else 1.0; total_display_penalty = 1.0 
-                spots_final = math.ceil(s_budget / (unit_net_sum * calc_penalty))
-                if spots_final % 2 != 0: spots_final += 1
-                if spots_final == 0: spots_final = 2
-                sch = calculate_schedule(spots_final, days_count); nat_pkg_display = 0
-                if cfg["is_national"]:
-                    nat_list = db["全省"][0]; nat_unit_price = int((nat_list / db["Std_Spots"]) * factor * total_display_penalty)
-                    nat_pkg_display = nat_unit_price * spots_final; total_list_accum += nat_pkg_display
-                for i, r in enumerate(display_regs):
-                    list_price_region = db[r][0]
-                    unit_rate_display = int((list_price_region / db["Std_Spots"]) * factor * row_display_penalty)
-                    total_rate_display = unit_rate_display * spots_final; row_pkg_display = total_rate_display
-                    if not cfg["is_national"]: total_list_accum += row_pkg_display
-                    rows.append({
-                        "media": m, "region": r, "program_num": store_counts_num.get(f"新鮮視_{r}" if m=="新鮮視" else r, 0),
-                        "daypart": db["Day_Part"], "seconds": sec, "spots": spots_final, "schedule": sch,
-                        "rate_display": total_rate_display, "pkg_display": row_pkg_display, "is_pkg_member": cfg["is_national"], "nat_pkg_display": nat_pkg_display
-                    })
-            elif m == "家樂福":
-                db = pricing_db["家樂福"]; base_std = db["量販_全省"]["Std_Spots"]
-                unit_net = (db["量販_全省"]["Net"] / base_std) * factor
-                spots_init = math.ceil(s_budget / unit_net); penalty = 1.1 if spots_init < base_std else 1.0
-                spots_final = math.ceil(s_budget / (unit_net * penalty))
-                if spots_final % 2 != 0: spots_final += 1
-                sch_h = calculate_schedule(spots_final, days_count)
-                base_list = db["量販_全省"]["List"]; unit_rate_h = int((base_list / base_std) * factor * penalty)
-                total_rate_h = unit_rate_h * spots_final; total_list_accum += total_rate_h
-                rows.append({"media": m, "region": "全省量販", "program_num": store_counts_num["家樂福_量販"], "daypart": db["量販_全省"]["Day_Part"], "seconds": sec, "spots": spots_final, "schedule": sch_h, "rate_display": total_rate_h, "pkg_display": total_rate_h, "is_pkg_member": False})
-                spots_s = int(spots_final * (db["超市_全省"]["Std_Spots"] / base_std)); sch_s = calculate_schedule(spots_s, days_count)
-                rows.append({"media": m, "region": "全省超市", "program_num": store_counts_num["家樂福_超市"], "daypart": db["超市_全省"]["Day_Part"], "seconds": sec, "spots": spots_s, "schedule": sch_s, "rate_display": "計量販", "pkg_display": "計量販", "is_pkg_member": False})
-    return rows, total_list_accum, debug_logs
-
-# =========================================================
 # 7. Render Engines (Optimized with Object Pooling & Caching)
 # =========================================================
 
@@ -303,7 +218,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=SIDE_MEDIUM)
 
     # -------------------------------------------------------------
-    # Render Logic: Dongwu (v111.1 Signature Polish)
+    # Render Logic: Dongwu
     # -------------------------------------------------------------
     def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -465,7 +380,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # -------------------------------------------------------------
-    # Render Logic: Shenghuo (v111.13 Row/Font Fix)
+    # Render Logic: Shenghuo
     # -------------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -674,11 +589,11 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return target_border_row
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.28 Final Fix)
+    # Render Logic: Bolin (v111.23 Bolin Final)
     # -------------------------------------------------------------
     def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod):
         SIDE_DOUBLE = Side(style='double')
-        logo_bytes = get_cloud_logo_bytes() # Auto fetch
+        logo_bytes = get_cloud_logo_bytes() # v111.23 Cloud Logo
         
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
@@ -704,7 +619,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 scale = 130 / img.height
                 img.height = 130
                 img.width = int(img.width * scale)
-                col_letter = get_column_letter(total_cols - 4)
+                
+                col_letter = get_column_letter(total_cols - 4) # Move left ~4 columns
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
@@ -747,7 +663,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == 1: l = BS_MEDIUM 
             if c_idx == total_cols: r = BS_MEDIUM 
             if c_idx == 6: l = None 
-            if c_idx == 5: r = None # [MODIFIED]: Cancel Right Border for E5
+            if c_idx == 5: r = None # [MODIFIED]: Cancel Right Border for E5 (Col 5)
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
         draw_outer_border_fast(ws, 5, 5, 1, 5) 
