@@ -1013,7 +1013,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         sig_start = curr_row - len(remarks_list)
         # [MODIFIED] Party B info anchored to column 14 (M)
-        sig_col_start = 14
+        sig_col_start = 15
         
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
