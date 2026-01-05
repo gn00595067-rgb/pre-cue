@@ -821,9 +821,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(start_row=sig_start+1, start_column=1, end_row=sig_start+1, end_column=7) 
         ws.cell(sig_start+1, 1, "統一編號：20935458").alignment = ALIGN_LEFT
         
-        # [NEW] Add Sales Person Row for Dongwu
+        # [NEW] Add Sales Person Row for Dongwu (Simplified)
         ws.merge_cells(start_row=sig_start+2, start_column=1, end_row=sig_start+2, end_column=7)
-        ws.cell(sig_start+2, 1, f"承辦人員：{sales_person}").alignment = ALIGN_LEFT
+        ws.cell(sig_start+2, 1, sales_person).alignment = ALIGN_LEFT
         ws.cell(sig_start+2, 1).font = FONT_STD
         
         right_start_col = 20 # Column T
