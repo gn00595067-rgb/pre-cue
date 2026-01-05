@@ -8,7 +8,7 @@ import requests
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Bolin Final)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.46 (Final Production)")
 
 import pandas as pd
 import math
@@ -263,6 +263,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # 7. Render Engines (Optimized with Object Pooling & Caching)
 # =========================================================
 
+# [Critical Fix]: Added explicit arguments `client_name` and `product_name` to fix NameError in Streamlit cache
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
     import openpyxl
@@ -680,7 +681,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     # -------------------------------------------------------------
     # Render Logic: Bolin (v111.23 Bolin Final Fix)
     # -------------------------------------------------------------
-    def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, logo_bytes=None):
+    # [FIX] Added explicit arguments: client_name, product_name, remarks_list
+    def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name, product_name, remarks_list, logo_bytes=None):
         SIDE_DOUBLE = Side(style='double')
         if logo_bytes is None:
             logo_bytes = get_cloud_logo_bytes() # Auto fetch from cloud
@@ -711,7 +713,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 img.height = 130
                 img.width = int(img.width * scale)
                 
-                col_letter = get_column_letter(total_cols - 4) # Move left ~4 columns as requested
+                col_letter = get_column_letter(total_cols - 4) # Move left ~4 columns
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
@@ -897,15 +899,15 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         sig_col_start = 1
         ws.cell(start_footer, sig_col_start).value = "乙      方："
-        ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
-        # (2) Party B is Client
+        # (2) Party B is Client (v111.23 Fix)
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
         ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："
         ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank
+        # (2) Tax ID Blank (v111.23 Fix)
         ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
@@ -913,7 +915,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         # (3) Double Border below Remark 6 + 2 rows
-        # Fixed: Use correct row index variable from Remarks loop
         target_border_row = r_row + 2
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
@@ -925,7 +926,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     
     if format_type == "Dongwu": render_dongwu_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
     elif format_type == "Shenghuo": render_shenghuo_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
-    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost, logo_bytes=None) 
+    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost, client_name, product_name, remarks_list) # [FIX]: Added explicit arguments
 
     out = io.BytesIO(); wb.save(out); return out.getvalue()
 
