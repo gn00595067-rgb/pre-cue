@@ -3,12 +3,11 @@ import traceback
 import time
 import gc
 from itertools import groupby
-import requests
 
 # =========================================================
 # 1. 頁面設定
 # =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.26 (Bolin Safe Fix)")
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.27 (Bolin Tweak)")
 
 import pandas as pd
 import math
@@ -18,6 +17,7 @@ import shutil
 import tempfile
 import subprocess
 import re
+import requests
 from datetime import timedelta, datetime, date
 from copy import copy
 
@@ -36,6 +36,7 @@ if "cb_cf" not in st.session_state: st.session_state.cb_cf = False
 # 3. 全域常數
 # =========================================================
 GSHEET_SHARE_URL = "https://docs.google.com/spreadsheets/d/1bzmG-N8XFsj8m3LUPqA8K70AcIqaK4Qhq1VPWcK0w_s/edit?usp=sharing"
+# v111.23: Cloud Logo URL (Export as PNG)
 BOLIN_LOGO_URL = "https://docs.google.com/drawings/d/17Uqgp-7LJJj9E4bV7Azo7TwXESPKTTIsmTbf-9tU9eE/export/png"
 
 FONT_MAIN = "微軟正黑體"
@@ -109,6 +110,7 @@ def find_soffice_path():
             if os.path.exists(p): return p
     return None
 
+# v111.23: Helper to fetch cloud logo
 @st.cache_data(show_spinner="正在下載 Logo...", ttl=3600)
 def get_cloud_logo_bytes():
     try:
@@ -268,7 +270,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     import openpyxl
     from openpyxl.utils import get_column_letter, column_index_from_string
     from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
-    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
 
     SIDE_THIN = Side(style=BS_THIN); SIDE_MEDIUM = Side(style=BS_MEDIUM); SIDE_HAIR = Side(style=BS_HAIR)
     BORDER_ALL_THIN = Border(top=SIDE_THIN, bottom=SIDE_THIN, left=SIDE_THIN, right=SIDE_THIN)
@@ -653,13 +654,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
-        # (2) Party B is Client (v111.23 Fix)
+        # (2) Party B is Client
         ws.cell(sig_start+1, sig_col_start+1).value = client_name 
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank (v111.23 Fix)
+        # (2) Tax ID Blank
         ws.cell(sig_start+2, sig_col_start+2).value = "" 
         ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
@@ -747,7 +748,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == 1: l = BS_MEDIUM 
             if c_idx == total_cols: r = BS_MEDIUM 
             if c_idx == 6: l = None 
-            if c_idx == 5: r = None # [MODIFIED]: Remove Right Border
+            
+            # [MODIFIED]: Cancel Right Border for E5 (Col 5)
+            if c_idx == 5: r = None
+
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
         draw_outer_border_fast(ws, 5, 5, 1, 5) 
@@ -887,13 +891,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         
-        # (2) Party B is Client (v111.23 Fix)
+        # (2) Party B is Client
         ws.cell(sig_start+1, sig_col_start+1).value = client_name 
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank (v111.23 Fix)
+        # (2) Tax ID Blank
         ws.cell(sig_start+2, sig_col_start+2).value = "" 
         ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
