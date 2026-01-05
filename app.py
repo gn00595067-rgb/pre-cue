@@ -788,9 +788,12 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return curr_row + 3
 
     # ---------------------------------------------------------
-    # Sub-Engine: Shenghuo (Updated based on user request)
+    # Sub-Engine: Shenghuo
     # ---------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
+        # [Fix] Define missing variable for double border
+        SIDE_DOUBLE = Side(style='double')
+        
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
         total_cols = end_c_start + 2
@@ -871,18 +874,15 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             set_border(ws.cell(7, start_col), left=BS_MEDIUM); set_border(ws.cell(7, end_col), right=BS_MEDIUM)
 
         curr = start_dt
-        
-        # [MODIFIED] Added week_list for Shenghuo
+        # [MODIFIED] Added week list
         week_list = ["一", "二", "三", "四", "五", "六", "日"]
 
         for i in range(eff_days):
             col_idx = 6 + i
             c = ws.cell(8, col_idx)
-            
-            # [MODIFIED] Added week string
+            # [MODIFIED] Display day and week
             wk_str = week_list[curr.weekday()]
             c.value = f"{curr.day}\n{wk_str}"
-            
             c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
             if curr.weekday() >= 5: c.fill = FILL_WEEKEND
             curr += timedelta(days=1)
@@ -972,7 +972,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for d_idx in range(eff_days):
             col_idx = 6 + d_idx
             daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
-            c = ws.cell(curr_row, col_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD
+            c = ws.cell(curr_row, 6+d_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD
         
         ws.cell(curr_row, end_c_start, sum([sum(r['schedule']) for r in rows])).alignment = ALIGN_CENTER; ws.cell(curr_row, end_c_start).font = FONT_BOLD
         ws.cell(curr_row, end_c_start+1, total_list_sum).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).font = FONT_BOLD; ws.cell(curr_row, end_c_start+1).alignment = ALIGN_CENTER
@@ -1003,8 +1003,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c_v.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
             
             if lbl == "Grand Total":
-                for c_idx in range(1, total_cols + 1):
-                    set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
+                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
 
             curr_row += 1
         
@@ -1029,7 +1028,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         curr_row = sig_start + 4 # Move curr_row down after signature block
 
         # Part 2: Remarks Block (Moved to Bottom)
-        
         # [MODIFIED] Remarks start from Column 6 (F column)
         r_col_start = 6 
         
@@ -1040,9 +1038,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for rm in remarks_list:
             curr_row += 1
             ws.row_dimensions[curr_row].height = 25 
-            
-            # Note: No merge cells here as per previous working logic to avoid conflict
-            
             is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
             is_blue = rm.strip().startswith("6.")
             color = "000000"
@@ -1471,7 +1466,7 @@ def main():
                     sorted_secs = sorted(secs)
                     for i, s in enumerate(sorted_secs):
                         if i < len(sorted_secs) - 1:
-                            v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}")
+                            v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}")
                             sec_shares[s] = v
                             rem -= v
                         else:
