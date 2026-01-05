@@ -207,7 +207,7 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
         gc.collect()
 
 # =========================================================
-# HTML 預覽生成 (Modified for Totals)
+# HTML 預覽生成 (Final Adjusted Version)
 # =========================================================
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
     eff_days = days_cnt
@@ -295,16 +295,23 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
 
     # Construct Total Row (Bottom)
     total_row_html = "<tr>"
-    # Merge the meta columns
-    total_row_html += f"<td colspan='{len(cols_def)}' style='text-align:right; font-weight:bold; background-color:#e0e0e0;'>Total Daily Spots</td>"
     
-    # Daily Totals
+    # 1. Merge Text Columns (Station, Loc, Prog, Daypart, Size) - Columns 0-4
+    total_row_html += f"<td colspan='5' style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>Total</td>"
+    
+    # 2. Rate (Net) Total - Column 5 (total_list)
+    total_row_html += f"<td style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>${total_list:,}</td>"
+    
+    # 3. Package-cost (Net) Total - Column 6 (budget / override)
+    total_row_html += f"<td style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>${budget:,}</td>"
+    
+    # 4. Daily Totals
     grand_total_spots = 0
     for day_sum in daily_totals:
         grand_total_spots += day_sum
         total_row_html += f"<td style='font-weight:bold; background-color:#e0e0e0;'>{day_sum}</td>"
     
-    # Grand Total (Bottom Right)
+    # 5. Grand Total (Bottom Right)
     total_row_html += f"<td style='font-weight:bold; background-color:#d0d0d0; border: 2px solid #000;'>{grand_total_spots}</td>"
     total_row_html += "</tr>"
 
