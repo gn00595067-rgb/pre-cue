@@ -207,7 +207,7 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
         gc.collect()
 
 # =========================================================
-# HTML 預覽生成 (White Background Fix)
+# HTML 預覽生成
 # =========================================================
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
     eff_days = days_cnt
@@ -322,7 +322,6 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     footer_html = f"<div style='margin-top:10px; font-weight:bold; text-align:right;'>製作費: ${prod:,}<br>5% VAT: ${vat:,}<br>Grand Total: ${grand_total:,}</div>"
     
     # Inline CSS styles - Modified for Mobile Visibility
-    # Added: background-color: #ffffff; color: #000000; to body to force white background on mobile
     css = """
     body { font-family: sans-serif; font-size: 10px; background-color: #ffffff; color: #000000; padding: 5px; }
     table { border-collapse: collapse; width: 100%; background-color: #ffffff; }
@@ -530,7 +529,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 # =========================================================
 
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
-def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost):
+def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost, sales_person):
     
     # Common Excel Styles
     SIDE_THIN = Side(style=BS_THIN)
@@ -822,6 +821,11 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(start_row=sig_start+1, start_column=1, end_row=sig_start+1, end_column=7) 
         ws.cell(sig_start+1, 1, "統一編號：20935458").alignment = ALIGN_LEFT
         
+        # [NEW] Add Sales Person Row for Dongwu
+        ws.merge_cells(start_row=sig_start+2, start_column=1, end_row=sig_start+2, end_column=7)
+        ws.cell(sig_start+2, 1, f"承辦人員：{sales_person}").alignment = ALIGN_LEFT
+        ws.cell(sig_start+2, 1).font = FONT_STD
+        
         right_start_col = 20 # Column T
         ws.merge_cells(start_row=sig_start, start_column=right_start_col, end_row=sig_start, end_column=right_start_col+7) 
         ws.cell(sig_start, right_start_col, f"乙    方：{client_name}").alignment = ALIGN_LEFT
@@ -864,7 +868,12 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         FONT_16 = Font(name=FONT_MAIN, size=16)
         ws.merge_cells(f"A3:{get_column_letter(total_cols)}3"); ws['A3'].value = "聲活數位科技股份有限公司 統編 28710100"; ws['A3'].font = FONT_16; ws['A3'].alignment = ALIGN_LEFT
-        ws.merge_cells(f"A4:{get_column_letter(total_cols)}4"); ws['A4'].value = "蔡伊閔"; ws['A4'].font = FONT_16; ws['A4'].alignment = ALIGN_LEFT
+        
+        # [NEW] Replace fixed name with Sales Person for Shenghuo
+        ws.merge_cells(f"A4:{get_column_letter(total_cols)}4")
+        ws['A4'].value = sales_person
+        ws['A4'].font = FONT_16
+        ws['A4'].alignment = ALIGN_LEFT
         
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
         space_gap = "　" * 10
@@ -1054,7 +1063,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         sig_start = curr_row - len(remarks_list)
         sig_col_start = max(1, total_cols - 8)
-        ws.cell(sig_start, sig_col_start).value = "乙 方："
+        ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
@@ -1107,7 +1116,10 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(f"B2:{get_column_letter(total_cols)}2"); c2b = ws['B2']; c2b.value = client_name; c2b.font = Font(name=FONT_MAIN, size=20, bold=True, color="FF0000"); c2b.alignment = ALIGN_LEFT
         
         c3a = ws['A3']; c3a.value = "FROM："; c3a.font = Font(name=FONT_MAIN, size=20, bold=True); c3a.alignment = ALIGN_LEFT
-        ws.merge_cells(f"B3:{get_column_letter(total_cols)}3"); c3b = ws['B3']; c3b.value = "鉑霖行動行銷 許雅婷 TINA"; c3b.font = Font(name=FONT_MAIN, size=20, bold=True); c3b.alignment = ALIGN_LEFT
+        ws.merge_cells(f"B3:{get_column_letter(total_cols)}3"); c3b = ws['B3']
+        # [NEW] Replace fixed name with Sales Person for Bolin
+        c3b.value = f"鉑霖行動行銷 {sales_person}" 
+        c3b.font = Font(name=FONT_MAIN, size=20, bold=True); c3b.alignment = ALIGN_LEFT
 
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
@@ -1295,7 +1307,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
         ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
-        # (3) Double Border below Remark 6 + 2 rows
         target_border_row = r_row + 2
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
@@ -1523,7 +1534,7 @@ def main():
             st.markdown("---")
             st.subheader("📥 檔案下載區")
             
-            xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost)
+            xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost, sales_person)
             
             col_dl1, col_dl2 = st.columns(2)
             
