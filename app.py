@@ -870,7 +870,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             for c_i in range(start_col, end_col+1): set_border(ws.cell(7, c_i), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
             set_border(ws.cell(7, start_col), left=BS_MEDIUM); set_border(ws.cell(7, end_col), right=BS_MEDIUM)
 
-curr = start_dt
+        curr = start_dt
         # 1. 定義星期幾文字 (跟鉑霖一樣的中文格式)
         week_list = ["一", "二", "三", "四", "五", "六", "日"]
 
