@@ -829,33 +829,33 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs])
         space_gap = "　" * 10
         period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
-        info_text = f"客戶名稱：{client_name}{space_gap}廣告規格：{sec_str}"
+        
+        # [MODIFIED] Header info row 5 (similar to Bolin)
+        # c5a: "客戶名稱：" (A5)
+        # c5b: Client Name (Merged B5:E5)
+        # c5c: "廣告規格：" (F5)
+        # c5d: Period String (Merged G5:End)
         
         FONT_14 = Font(name=FONT_MAIN, size=14)
-        mid_split_col = end_c_start
-        ws.merge_cells(f"A5:{get_column_letter(mid_split_col)}5")
-        c5 = ws['A5']; c5.value = info_text; c5.font = FONT_14; c5.alignment = ALIGN_LEFT 
+        c5a = ws['A5']; c5a.value = "客戶名稱："; c5a.font = FONT_14; c5a.alignment = ALIGN_LEFT
+        ws.merge_cells("B5:E5"); c5b = ws['B5']; c5b.value = client_name; c5b.font = FONT_14; c5b.alignment = ALIGN_LEFT
+        
+        spec_merge_start = "F5"; spec_merge_end = f"{get_column_letter(end_c_start)}5"
+        ws.merge_cells(f"{spec_merge_start}:{spec_merge_end}")
+        c5f = ws['F5']; c5f.value = f"廣告規格：{sec_str}"; c5f.font = FONT_14; c5f.alignment = ALIGN_LEFT
         
         ws.merge_cells(f"{get_column_letter(end_c_start+1)}5:{get_column_letter(total_cols)}5")
         c5_r = ws[f"{get_column_letter(end_c_start+1)}5"]; c5_r.value = period_str; c5_r.font = FONT_14; c5_r.alignment = ALIGN_LEFT 
-        
         draw_outer_border_fast(ws, 5, 5, 1, total_cols)
 
-        ws.merge_cells(f"A6:{get_column_letter(total_cols)}6")
-        c6 = ws['A6']; c6.value = f"廣告名稱：{product_name}"; c6.font = FONT_14; c6.alignment = ALIGN_LEFT
-        draw_outer_border_fast(ws, 6, 6, 1, total_cols)
+        # [MODIFIED] Header info row 6 (similar to Bolin)
+        # c6a: "廣告名稱：" (A6)
+        # c6b: Product Name (Merged B6:E6)
+        # Month Headers (Merged F6 onwards based on month groups)
         
-        headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
-        for i, h in enumerate(headers):
-            c_idx = i + 1
-            ws.merge_cells(start_row=7, start_column=c_idx, end_row=8, end_column=c_idx)
-            c = ws.cell(7, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
-            t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
-            if c_idx == 1: l = BS_MEDIUM
-            c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
-            ws.cell(8, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
+        c6a = ws['A6']; c6a.value = "廣告名稱："; c6a.font = FONT_14; c6a.alignment = ALIGN_LEFT
+        ws.merge_cells("B6:E6"); c6b = ws['B6']; c6b.value = product_name; c6b.font = FONT_14; c6b.alignment = ALIGN_LEFT
 
-        curr = start_dt
         month_groups = []
         for i in range(eff_days):
             d = start_dt + timedelta(days=i)
@@ -868,49 +868,74 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for m_key, s_idx, e_idx in month_groups:
             start_col = 6 + s_idx
             end_col = 6 + e_idx
-            ws.merge_cells(start_row=7, start_column=start_col, end_row=7, end_column=end_col)
-            c = ws.cell(7, start_col); c.value = f"{m_key[1]}月"; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
-            for c_i in range(start_col, end_col+1): set_border(ws.cell(7, c_i), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
-            set_border(ws.cell(7, start_col), left=BS_MEDIUM); set_border(ws.cell(7, end_col), right=BS_MEDIUM)
+            ws.merge_cells(start_row=6, start_column=start_col, end_row=6, end_column=end_col)
+            c = ws.cell(6, start_col); c.value = f"{m_key[1]}月"; c.font = FONT_BOLD; c.alignment = ALIGN_LEFT; c.border = BORDER_ALL_MEDIUM
+            
+        # Draw Borders for Row 6 (similar to Bolin)
+        for c_idx in range(1, total_cols + 1):
+            c = ws.cell(6, c_idx)
+            t, b, l, r = BS_MEDIUM, BS_MEDIUM, None, None
+            if c_idx == 1: l = BS_MEDIUM 
+            if c_idx == total_cols: r = BS_MEDIUM 
+            if c_idx == 6: l = None 
+            c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
+            
+        draw_outer_border_fast(ws, 6, 6, 1, 5) 
+        # [Manual Fix] Remove E6 right border conflict
+        ws.cell(6, 5).border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), right=Side(style=None))
+        
+        # [MODIFIED] Date Headers Row 7 & 8 (similar to Bolin)
+        header_start_row = 7
+        headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
+        for i, h in enumerate(headers):
+            c_idx = i + 1
+            ws.merge_cells(start_row=header_start_row, start_column=c_idx, end_row=header_start_row+1, end_column=c_idx)
+            c = ws.cell(header_start_row, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
+            t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
+            if c_idx == 1: l = BS_MEDIUM
+            c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
+            ws.cell(header_start_row+1, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
 
         curr = start_dt
-        # [MODIFIED] Added week list with correct Chinese days
-        week_list = ["一", "二", "三", "四", "五", "六", "日"]
-
         for i in range(eff_days):
             col_idx = 6 + i
-            c = ws.cell(8, col_idx)
+            # Row 7: Date Number
+            c7 = ws.cell(header_start_row, col_idx); c7.value = curr.day; c7.font = FONT_BOLD; c7.alignment = ALIGN_CENTER; c7.border = BORDER_ALL_MEDIUM
+            c7.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             
-            # [MODIFIED] Correctly fetch weekday string and format with newline
-            wk_str = week_list[curr.weekday()]
-            c.value = f"{curr.day}\n{wk_str}"
+            # Row 8: Weekday
+            c8 = ws.cell(header_start_row+1, col_idx); c8.value = ["日","一","二","三","四","五","六"][(curr.weekday()+1)%7]
+            c8.font = FONT_BOLD; c8.alignment = ALIGN_CENTER
             
-            c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
-            if curr.weekday() >= 5: c.fill = FILL_WEEKEND
+            style_left = BS_MEDIUM if col_idx == 6 else BS_THIN
+            c8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=style_left), right=Side(style=BS_THIN))
+            
+            if curr.weekday() >= 5: c8.fill = FILL_WEEKEND
             curr += timedelta(days=1)
 
         end_headers = ["檔次", "定價", "專案價"]
         for i, h in enumerate(end_headers):
             c_idx = end_c_start + i
-            ws.merge_cells(start_row=7, start_column=c_idx, end_row=8, end_column=c_idx)
-            c = ws.cell(7, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
+            ws.merge_cells(start_row=header_start_row, start_column=c_idx, end_row=header_start_row+1, end_column=c_idx)
+            c = ws.cell(header_start_row, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
             t, b, l, r = BS_MEDIUM, BS_THIN, BS_THIN, BS_THIN
             if c_idx == total_cols: r = BS_MEDIUM
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l), right=Side(style=r))
-            ws.cell(8, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
+            ws.cell(header_start_row+1, c_idx).border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=l), right=Side(style=r))
 
+        # Fix borders for date columns
         date_start_col = 6
         for c_idx in range(date_start_col, total_cols + 1):
-            c7 = ws.cell(7, c_idx)
+            c7 = ws.cell(header_start_row, c_idx)
             c7.border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if c_idx == date_start_col: set_border(c7, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c7, right=BS_MEDIUM)
-            c8 = ws.cell(8, c_idx)
+            c8 = ws.cell(header_start_row+1, c_idx)
             c8.border = Border(top=Side(style=BS_THIN), bottom=Side(style=BS_THIN), left=Side(style=BS_THIN), right=Side(style=BS_THIN))
             if c_idx == date_start_col: set_border(c8, left=BS_MEDIUM)
             if c_idx == total_cols: set_border(c8, right=BS_MEDIUM)
 
-        curr_row = 9
+        curr_row = header_start_row + 2
         grouped_data = {"全家廣播": sorted([r for r in rows if r["media"]=="全家廣播"], key=lambda x:x['seconds']),
                         "新鮮視": sorted([r for r in rows if r["media"]=="新鮮視"], key=lambda x:x['seconds']),
                         "家樂福": sorted([r for r in rows if r["media"]=="家樂福"], key=lambda x:x['seconds'])}
@@ -1040,8 +1065,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
         
         # Remarks content loop
-        # We need a separate row counter for remarks to avoid overwriting signature rows if remarks are short,
-        # or to extend beyond signature rows if remarks are long.
         current_rem_row = start_footer
         
         for rm in remarks_list:
@@ -1059,10 +1082,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         # --- 3. Determine Bottom Border Position ---
-        # The signature block is guaranteed to take 4 rows (start_footer to start_footer+3)
-        # The remarks block ends at current_rem_row
-        # We need the border to be below the lowest of the two.
-        
         last_sig_row = start_footer + 3
         last_content_row = max(last_sig_row, current_rem_row)
         
