@@ -616,45 +616,31 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         for pos, lbl, val in infos:
             c = ws[pos]
-            c.value = lbl
-            c.font = FONT_BOLD
-            c.alignment = Alignment(vertical='center')
-            c2 = ws.cell(c.row, 2)
-            c2.value = val
-            c2.font = FONT_BOLD
-            c2.alignment = Alignment(vertical='center')
+            c.value = lbl; c.font = FONT_BOLD; c.alignment = Alignment(vertical='center')
+            c2 = ws.cell(c.row, 2); c2.value = val; c2.font = FONT_BOLD; c2.alignment = Alignment(vertical='center')
         
         for c_idx in range(1, total_cols + 1):
             set_border(ws.cell(3, c_idx), top=BS_MEDIUM)
 
         ws['H6'] = f"{start_dt.month}月"
-        ws['H6'].font = Font(name=FONT_MAIN, size=16, bold=True)
-        ws['H6'].alignment = ALIGN_CENTER
+        ws['H6'].font = Font(name=FONT_MAIN, size=16, bold=True); ws['H6'].alignment = ALIGN_CENTER
         
         headers = [("A","Station"), ("B","Location"), ("C","Program"), ("D","Day-part"), ("E","Size"), ("F","rate\n(Net)"), ("G","Package-cost\n(Net)")]
         for col, txt in headers:
             col_idx = column_index_from_string(col)
             ws.merge_cells(f"{col}7:{col}8")
-            c7 = ws.cell(7, col_idx)
-            c7.value = txt
-            c8 = ws.cell(8, col_idx)
-            c7.font = FONT_BOLD
-            c7.alignment = ALIGN_CENTER
-            c7.border = BORDER_ALL_THIN
-            c8.border = BORDER_ALL_THIN
-            set_border(c7, top=BS_MEDIUM)
-            set_border(c8, bottom=BS_MEDIUM)
+            c7 = ws.cell(7, col_idx); c7.value = txt; c8 = ws.cell(8, col_idx)
+            c7.font = FONT_BOLD; c7.alignment = ALIGN_CENTER
+            c7.border = BORDER_ALL_THIN; c8.border = BORDER_ALL_THIN
+            set_border(c7, top=BS_MEDIUM); set_border(c8, bottom=BS_MEDIUM)
 
         curr = start_dt
         for i in range(eff_days):
             col_idx = 8 + i
-            c_d = ws.cell(7, col_idx)
-            c_w = ws.cell(8, col_idx)
-            c_d.value = curr
-            c_d.number_format = 'm/d'
+            c_d = ws.cell(7, col_idx); c_w = ws.cell(8, col_idx)
+            c_d.value = curr; c_d.number_format = 'm/d'
             c_w.value = ["一","二","三","四","五","六","日"][curr.weekday()]
-            if curr.weekday() >= 5:
-                c_w.fill = FILL_WEEKEND
+            if curr.weekday() >= 5: c_w.fill = FILL_WEEKEND
             curr += timedelta(days=1)
             c_d.font = FONT_STD; c_w.font = FONT_STD
             c_d.alignment = ALIGN_CENTER; c_w.alignment = ALIGN_CENTER
@@ -662,9 +648,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             set_border(c_d, top=BS_MEDIUM); set_border(c_w, bottom=BS_MEDIUM)
 
         # Total Spots Header
-        c_spots_7 = ws.cell(7, spots_col_idx)
-        c_spots_7.value = "檔次"
-        c_spots_8 = ws.cell(8, spots_col_idx)
+        c_spots_7 = ws.cell(7, spots_col_idx); c_spots_7.value = "檔次"; c_spots_8 = ws.cell(8, spots_col_idx)
         ws.merge_cells(start_row=7, start_column=spots_col_idx, end_row=8, end_column=spots_col_idx)
         c_spots_7.font = FONT_BOLD; c_spots_7.alignment = ALIGN_CENTER
         c_spots_7.border = BORDER_ALL_THIN; c_spots_8.border = BORDER_ALL_THIN
@@ -696,57 +680,38 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 ws.cell(curr_row, 4, r["daypart"]).alignment = ALIGN_CENTER
                 ws.cell(curr_row, 5, f"{r['seconds']}秒").alignment = ALIGN_CENTER
                 
-                rate = r['rate_display']
-                pkg = r['pkg_display']
-                if isinstance(rate, (int, float)):
-                    total_rate_sum += rate
+                rate = r['rate_display']; pkg = r['pkg_display']
+                if isinstance(rate, (int, float)): total_rate_sum += rate
+                if r.get("is_pkg_member"): pkg = r['nat_pkg_display'] if idx == 0 else None
                 
-                if r.get("is_pkg_member"):
-                    pkg = r['nat_pkg_display'] if idx == 0 else None
-                
-                c_rate = ws.cell(curr_row, 6)
-                c_rate.value = rate
-                c_rate.number_format = FMT_MONEY
-                c_rate.alignment = ALIGN_CENTER
+                c_rate = ws.cell(curr_row, 6); c_rate.value = rate
+                c_rate.number_format = FMT_MONEY; c_rate.alignment = ALIGN_CENTER
                 
                 if pkg is not None:
-                    c_pkg = ws.cell(curr_row, 7)
-                    c_pkg.value = pkg
-                    c_pkg.number_format = FMT_MONEY
-                    c_pkg.alignment = ALIGN_CENTER
+                    c_pkg = ws.cell(curr_row, 7); c_pkg.value = pkg
+                    c_pkg.number_format = FMT_MONEY; c_pkg.alignment = ALIGN_CENTER
 
                 row_sum = 0
                 for d_idx in range(eff_days):
                     if d_idx < len(r["schedule"]):
-                        val = r["schedule"][d_idx]
-                        row_sum += val
-                        c_s = ws.cell(curr_row, 8+d_idx)
-                        c_s.value = val
-                        c_s.number_format = FMT_NUMBER
-                        c_s.alignment = ALIGN_CENTER
+                        val = r["schedule"][d_idx]; row_sum += val
+                        c_s = ws.cell(curr_row, 8+d_idx); c_s.value = val
+                        c_s.number_format = FMT_NUMBER; c_s.alignment = ALIGN_CENTER
                 
                 ws.cell(curr_row, spots_col_idx, row_sum).alignment = ALIGN_CENTER
-                
                 for c_idx in range(1, total_cols + 1):
-                    cell = ws.cell(curr_row, c_idx)
-                    cell.font = FONT_STD
-                    cell.border = BORDER_ALL_THIN
+                    cell = ws.cell(curr_row, c_idx); cell.font = FONT_STD; cell.border = BORDER_ALL_THIN
                 curr_row += 1
 
             ws.merge_cells(start_row=start_merge, start_column=1, end_row=curr_row-1, end_column=1)
-            if data[0].get("is_pkg_member"):
-                ws.merge_cells(start_row=start_merge, start_column=7, end_row=curr_row-1, end_column=7)
+            if data[0].get("is_pkg_member"): ws.merge_cells(start_row=start_merge, start_column=7, end_row=curr_row-1, end_column=7)
             
-            # Merge Daypart & Size if identical
             for col in [4, 5]:
                 m_start = start_merge
                 while m_start < curr_row:
-                    m_end = m_start
-                    val = ws.cell(m_start, col).value
-                    while m_end + 1 < curr_row and ws.cell(m_end+1, col).value == val:
-                        m_end += 1
-                    if m_end > m_start:
-                        ws.merge_cells(start_row=m_start, start_column=col, end_row=m_end, end_column=col)
+                    m_end = m_start; val = ws.cell(m_start, col).value
+                    while m_end + 1 < curr_row and ws.cell(m_end+1, col).value == val: m_end += 1
+                    if m_end > m_start: ws.merge_cells(start_row=m_start, start_column=col, end_row=m_end, end_column=col)
                     m_start = m_end + 1
             
             draw_outer_border_fast(ws, start_merge, curr_row-1, 1, total_cols)
@@ -762,44 +727,29 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         total_spots_all = 0
         for d_idx in range(eff_days):
-            daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
-            total_spots_all += daily_sum
-            c = ws.cell(curr_row, 8+d_idx)
-            c.value = daily_sum
-            c.alignment = ALIGN_CENTER
-            c.font = FONT_STD
-            c.number_format = FMT_NUMBER
+            daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])]); total_spots_all += daily_sum
+            c = ws.cell(curr_row, 8+d_idx); c.value = daily_sum
+            c.alignment = ALIGN_CENTER; c.font = FONT_STD; c.number_format = FMT_NUMBER
         
-        ws.cell(curr_row, spots_col_idx, total_spots_all).alignment = ALIGN_CENTER
-        ws.cell(curr_row, spots_col_idx).font = FONT_STD
-        
+        ws.cell(curr_row, spots_col_idx, total_spots_all).alignment = ALIGN_CENTER; ws.cell(curr_row, spots_col_idx).font = FONT_STD
         for c_idx in range(1, total_cols + 1):
             set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
         set_border(ws.cell(curr_row, 1), left=BS_MEDIUM, right=BS_MEDIUM)
         set_border(ws.cell(curr_row, spots_col_idx), left=BS_MEDIUM, right=BS_MEDIUM)
         curr_row += 1
 
-        vat = int(budget * 0.05)
-        grand_total = budget + vat
+        vat = int(budget * 0.05); grand_total = budget + vat
         footer_items = [("媒體", budget), ("製作", prod), ("5% VAT", vat), ("Grand Total", grand_total)]
         
         for label, val in footer_items:
             if label == "媒體": continue 
             ws.row_dimensions[curr_row].height = 30
-            c_l = ws.cell(curr_row, 6)
-            c_l.value = label
-            c_l.alignment = ALIGN_LEFT
-            c_l.font = FONT_STD
-            c_v = ws.cell(curr_row, 7)
-            c_v.value = val
-            c_v.number_format = FMT_MONEY
-            c_v.alignment = ALIGN_CENTER
-            c_v.font = FONT_STD
+            c_l = ws.cell(curr_row, 6); c_l.value = label; c_l.alignment = ALIGN_LEFT; c_l.font = FONT_STD
+            c_v = ws.cell(curr_row, 7); c_v.value = val; c_v.number_format = FMT_MONEY; c_v.alignment = ALIGN_CENTER; c_v.font = FONT_STD
             set_border(c_l, left=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, right=BS_THIN)
             set_border(c_v, right=BS_MEDIUM, top=BS_THIN, bottom=BS_THIN, left=BS_THIN)
             if label == "Grand Total":
-                for c_idx in range(1, total_cols + 1):
-                    set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM)
+                for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM)
             curr_row += 1
         
         draw_outer_border_fast(ws, 7, curr_row-1, 1, total_cols)
@@ -809,9 +759,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for rm in remarks_list:
             curr_row += 1
             is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
-            c = ws.cell(curr_row, 1)
-            c.value = rm
-            c.font = Font(name=FONT_MAIN, size=14, color="FF0000" if is_red else "000000")
+            c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=14, color="FF0000" if is_red else "000000")
 
         # Signature Block
         curr_row += 2 
@@ -823,7 +771,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         # [NEW] Add Sales Person Row for Dongwu (Simplified)
         ws.merge_cells(start_row=sig_start+2, start_column=1, end_row=sig_start+2, end_column=7)
-        ws.cell(sig_start+2, 1, sales_person).alignment = ALIGN_LEFT # Removed "承辦人員：" prefix
+        ws.cell(sig_start+2, 1, sales_person).alignment = ALIGN_LEFT 
         ws.cell(sig_start+2, 1).font = FONT_STD
         
         right_start_col = 20 # Column T
@@ -869,7 +817,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         FONT_16 = Font(name=FONT_MAIN, size=16)
         ws.merge_cells(f"A3:{get_column_letter(total_cols)}3"); ws['A3'].value = "聲活數位科技股份有限公司 統編 28710100"; ws['A3'].font = FONT_16; ws['A3'].alignment = ALIGN_LEFT
         
-        # [NEW] Replace fixed name with Sales Person for Shenghuo
+        # Replace fixed name with Sales Person for Shenghuo
         ws.merge_cells(f"A4:{get_column_letter(total_cols)}4")
         ws['A4'].value = sales_person
         ws['A4'].font = FONT_16
@@ -1064,7 +1012,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         sig_start = curr_row - len(remarks_list)
-        sig_col_start = max(1, total_cols - 8)
+        # [MODIFIED] Party B info anchored to column 13 (M)
+        sig_col_start = 13 
+        
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
