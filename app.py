@@ -206,6 +206,9 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
     finally:
         gc.collect()
 
+# =========================================================
+# HTML 預覽生成 (Modified for Totals)
+# =========================================================
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
     eff_days = days_cnt
     
@@ -238,6 +241,9 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
 
     th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
     
+    # Add Total Column Header (Right Side)
+    th_total_right = f"<th rowspan='2' class='{header_cls}' style='min-width:50px;'>Total<br>Spots</th>"
+
     unique_media = sorted(list(set([r['media'] for r in rows])))
     medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
     
@@ -245,6 +251,9 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     # Sort: 全家廣播 -> 新鮮視 -> 家樂福 -> seconds
     rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
     
+    # Calculate Daily Totals (Bottom Row)
+    daily_totals = [0] * eff_days
+
     for key, group in groupby(rows_sorted, lambda x: (x['media'], x['seconds'], x.get('nat_pkg_display', 0))):
         g_list = list(group)
         g_size = len(g_list)
@@ -272,11 +281,34 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
             else:
                 tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td>{pkg_val_str}"
             
-            # Schedule Cells
-            for d in r['schedule'][:eff_days]:
+            # Schedule Cells & Row Total Calculation
+            row_spots_sum = 0
+            for d_idx, d in enumerate(r['schedule'][:eff_days]):
                 tbody += f"<td>{d}</td>"
+                row_spots_sum += d
+                if d_idx < len(daily_totals):
+                    daily_totals[d_idx] += d
             
+            # Add Row Total Cell (Right Side)
+            tbody += f"<td style='font-weight:bold; background-color:#f0f0f0;'>{row_spots_sum}</td>"
             tbody += "</tr>"
+
+    # Construct Total Row (Bottom)
+    total_row_html = "<tr>"
+    # Merge the meta columns
+    total_row_html += f"<td colspan='{len(cols_def)}' style='text-align:right; font-weight:bold; background-color:#e0e0e0;'>Total Daily Spots</td>"
+    
+    # Daily Totals
+    grand_total_spots = 0
+    for day_sum in daily_totals:
+        grand_total_spots += day_sum
+        total_row_html += f"<td style='font-weight:bold; background-color:#e0e0e0;'>{day_sum}</td>"
+    
+    # Grand Total (Bottom Right)
+    total_row_html += f"<td style='font-weight:bold; background-color:#d0d0d0; border: 2px solid #000;'>{grand_total_spots}</td>"
+    total_row_html += "</tr>"
+
+    tbody += total_row_html
 
     remarks_html = "<br>".join([html_escape(x) for x in remarks])
     vat = int(round(budget * 0.05))
@@ -293,7 +325,7 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     .bg-weekend { background-color: #FFFFCC; }
     """
     
-    return f"<html><head><style>{css}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
+    return f"<html><head><style>{css}</style></head><body><div style='margin-bottom:10px;'><b>客戶名稱：</b>{html_escape(c_name)} &nbsp; <b>Product：</b>{html_escape(p_display)}<br><b>Period：</b>{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')} &nbsp; <b>Medium：</b>{html_escape(medium_str)}</div><div style='overflow-x:auto;'><table><thead><tr>{th_fixed}{date_th1}{th_total_right}</tr><tr>{date_th2}</tr></thead><tbody>{tbody}</tbody></table></div>{footer_html}<div style='margin-top:10px; font-size:11px;'><b>Remarks：</b><br>{remarks_html}</div></body></html>"
 
 # =========================================================
 # 5. 資料讀取與運算 (Data Loading & Calculation)
@@ -1242,17 +1274,20 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer, sig_col_start).value = "乙      方："
         ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
+        # (2) Party B is Client
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
         ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："
         ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        # (2) Tax ID Blank
         ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
         ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
+        # (3) Double Border below Remark 6 + 2 rows
         target_border_row = r_row + 2
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
