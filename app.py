@@ -4,12 +4,6 @@ import time
 import gc
 from itertools import groupby
 import requests
-
-# =========================================================
-# 1. 頁面設定
-# =========================================================
-st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.25 (Bolin Fix)")
-
 import pandas as pd
 import math
 import io
@@ -20,6 +14,11 @@ import subprocess
 import re
 from datetime import timedelta, datetime, date
 from copy import copy
+
+# =========================================================
+# 1. 頁面設定
+# =========================================================
+st.set_page_config(layout="wide", page_title="Cue Sheet Pro v111.23 (Bolin Final Tweaked)")
 
 # =========================================================
 # 2. Session State 初始化
@@ -303,7 +302,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             cell.border = Border(top=cur.top, bottom=cur.bottom, left=cur.left, right=SIDE_MEDIUM)
 
     # -------------------------------------------------------------
-    # Render Logic: Dongwu
+    # Render Logic: Dongwu (v111.1 Signature Polish)
     # -------------------------------------------------------------
     def render_dongwu_optimized(ws, start_dt, end_dt, rows, budget, prod):
         eff_days = (end_dt - start_dt).days + 1
@@ -678,13 +677,11 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         return target_border_row
 
     # -------------------------------------------------------------
-    # Render Logic: Bolin (v111.25 Explicit Args + Tweaks)
+    # Render Logic: Bolin (v111.23 Bolin Final Fix)
     # -------------------------------------------------------------
-    # NOTE: Added explicit arguments here to solve NameError
-    def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, client_name, product_name, remarks_list, logo_bytes=None):
+    def render_bolin_optimized(ws, start_dt, end_dt, rows, budget, prod, logo_bytes=None):
         SIDE_DOUBLE = Side(style='double')
-        if logo_bytes is None:
-            logo_bytes = get_cloud_logo_bytes() # Auto fetch
+        logo_bytes = get_cloud_logo_bytes() # Auto fetch from cloud
         
         eff_days = (end_dt - start_dt).days + 1
         end_c_start = 6 + eff_days
@@ -695,7 +692,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.column_dimensions['C'].width = 13.8; ws.column_dimensions['D'].width = 19.4; ws.column_dimensions['E'].width = 15.0
         for i in range(eff_days): ws.column_dimensions[get_column_letter(6 + i)].width = 8.1
         ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5
-        ws.column_dimensions[get_column_letter(end_c_start+1)].width = 36.0 # [TWEAK 2]: Changed 58.0 to 36.0
+        ws.column_dimensions[get_column_letter(end_c_start+1)].width = 36.0 # [TWEAK] Change from 58.0 to 36.0
         ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0
         
         ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35}
@@ -712,7 +709,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
                 img.height = 130
                 img.width = int(img.width * scale)
                 
-                col_letter = get_column_letter(total_cols - 4) # [TWEAK 3]: Move left ~4 columns (approx)
+                col_letter = get_column_letter(total_cols - 1)
                 img.anchor = f"{col_letter}1" 
                 ws.add_image(img)
             except Exception: pass
@@ -755,10 +752,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == 1: l = BS_MEDIUM 
             if c_idx == total_cols: r = BS_MEDIUM 
             if c_idx == 6: l = None 
-            
-            # [TWEAK 1]: Cancel Right Border for E5 (Col 5)
-            if c_idx == 5: r = None
-
+            if c_idx == 5: r = None # [TWEAK] Remove right border for E5 (Col 5)
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
         draw_outer_border_fast(ws, 5, 5, 1, 5) 
@@ -925,7 +919,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     
     if format_type == "Dongwu": render_dongwu_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
     elif format_type == "Shenghuo": render_shenghuo_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
-    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost, client_name, product_name, remarks_list) # [MODIFIED]: Added explicit arguments
+    else: render_bolin_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost, logo_bytes=None)
 
     out = io.BytesIO(); wb.save(out); return out.getvalue()
 
