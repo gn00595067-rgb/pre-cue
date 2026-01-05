@@ -1024,13 +1024,15 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         sig_start = curr_row - len(remarks_list)
+        
         # [MODIFIED] Party B info anchored to column 14 (N)
-        sig_col_start = 14
+        sig_col_start = 14 
         
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
         ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
         ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        
         ws.cell(sig_start+2, sig_col_start).value = "統一編號："
         ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         ws.cell(sig_start+2, sig_col_start+2).value = "" 
@@ -1039,7 +1041,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
         ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
-        target_border_row = r_row + 2
+        target_border_row = curr_row + 2
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
 
@@ -1260,23 +1262,35 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if is_blue: color = "0000FF"
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
-        sig_start = curr_row - len(remarks_list)
+        start_footer = curr_row
         
-        # [MODIFIED] Party B info anchored to column 14 (N)
-        sig_col_start = 14 
+        r_col_start = 6 
+        ws.row_dimensions[start_footer].height = 25 # Fix Remarks Title Height
+        ws.cell(start_footer, r_col_start).value = "Remarks："
+        ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
+        r_row = start_footer
+        for rm in remarks_list:
+            r_row += 1
+            ws.row_dimensions[r_row].height = 25 # Fix Remarks Content Height
+            color = "000000"
+            if rm.strip().startswith("1.") or rm.strip().startswith("4."): color = "FF0000"
+            if rm.strip().startswith("6."): color = "0000FF"
+            c = ws.cell(r_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+
+        sig_col_start = 1
+        ws.cell(start_footer, sig_col_start).value = "乙      方："
+        ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(sig_start, sig_col_start).value = "乙      方："
-        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
-        ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
-        ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+1, sig_col_start+1).value = client_name 
+        ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(sig_start+2, sig_col_start).value = "統一編號："
-        ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(sig_start+2, sig_col_start+2).value = "" 
-        ws.cell(sig_start+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+2, sig_col_start).value = "統一編號："
+        ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+2, sig_col_start+2).value = "" 
+        ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
-        ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
-        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
+        ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         target_border_row = r_row + 2
         for c_idx in range(1, total_cols + 1):
