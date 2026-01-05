@@ -870,12 +870,27 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             for c_i in range(start_col, end_col+1): set_border(ws.cell(7, c_i), top=BS_MEDIUM, bottom=BS_MEDIUM, left=BS_THIN, right=BS_THIN)
             set_border(ws.cell(7, start_col), left=BS_MEDIUM); set_border(ws.cell(7, end_col), right=BS_MEDIUM)
 
-        curr = start_dt
+curr = start_dt
+        # 1. 定義星期幾文字 (跟鉑霖一樣的中文格式)
+        week_list = ["一", "二", "三", "四", "五", "六", "日"]
+
         for i in range(eff_days):
             col_idx = 6 + i
-            c = ws.cell(8, col_idx); c.value = curr.day; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
-            if curr.weekday() >= 5: c.fill = FILL_WEEKEND
-            curr += timedelta(days=1)
+            c = ws.cell(8, col_idx)
+            
+            # 2. 組合「日期」+「換行」+「星期幾」
+            # 這樣顯示出來就會像鉑霖一樣，上面是數字，下面是星期
+            wk_str = week_list[curr.weekday()]
+            c.value = f"{curr.day}\n{wk_str}"
+            
+            c.font = FONT_BOLD
+            # 這裡的 ALIGN_CENTER 已包含 wrap_text=True，所以換行會生效
+            c.alignment = ALIGN_CENTER
+            c.border = BORDER_ALL_MEDIUM
+            
+            if curr.weekday() >= 5: 
+                c.fill = FILL_WEEKEND
+            curr += timedelta(days=1)1)
 
         end_headers = ["檔次", "定價", "專案價"]
         for i, h in enumerate(end_headers):
@@ -1012,8 +1027,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws.cell(curr_row, 1); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         sig_start = curr_row - len(remarks_list)
-        # [MODIFIED] Party B info anchored to column 14 (M)
-        sig_col_start = 15
+        # [MODIFIED] Party B info anchored to column 16 
+        sig_col_start = 16
         
         ws.cell(sig_start, sig_col_start).value = "乙      方："
         ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
