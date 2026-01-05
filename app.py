@@ -791,7 +791,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     # Sub-Engine: Shenghuo
     # ---------------------------------------------------------
     def render_shenghuo_optimized(ws, start_dt, end_dt, rows, budget, prod):
-        # [Fix] Define missing variable for double border
+        # [NEW] Define SIDE_DOUBLE explicitly within this function scope
         SIDE_DOUBLE = Side(style='double')
         
         eff_days = (end_dt - start_dt).days + 1
@@ -874,15 +874,17 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             set_border(ws.cell(7, start_col), left=BS_MEDIUM); set_border(ws.cell(7, end_col), right=BS_MEDIUM)
 
         curr = start_dt
-        # [MODIFIED] Added week list
+        # [MODIFIED] Added week list with correct Chinese days
         week_list = ["一", "二", "三", "四", "五", "六", "日"]
 
         for i in range(eff_days):
             col_idx = 6 + i
             c = ws.cell(8, col_idx)
-            # [MODIFIED] Display day and week
+            
+            # [MODIFIED] Correctly fetch weekday string and format with newline
             wk_str = week_list[curr.weekday()]
             c.value = f"{curr.day}\n{wk_str}"
+            
             c.font = FONT_BOLD; c.alignment = ALIGN_CENTER; c.border = BORDER_ALL_MEDIUM
             if curr.weekday() >= 5: c.fill = FILL_WEEKEND
             curr += timedelta(days=1)
@@ -972,7 +974,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         for d_idx in range(eff_days):
             col_idx = 6 + d_idx
             daily_sum = sum([r['schedule'][d_idx] for r in rows if d_idx < len(r['schedule'])])
-            c = ws.cell(curr_row, 6+d_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD
+            c = ws.cell(curr_row, col_idx); c.value = daily_sum; c.alignment = ALIGN_CENTER; c.font = FONT_BOLD
         
         ws.cell(curr_row, end_c_start, sum([sum(r['schedule']) for r in rows])).alignment = ALIGN_CENTER; ws.cell(curr_row, end_c_start).font = FONT_BOLD
         ws.cell(curr_row, end_c_start+1, total_list_sum).number_format = FMT_MONEY; ws.cell(curr_row, end_c_start+1).font = FONT_BOLD; ws.cell(curr_row, end_c_start+1).alignment = ALIGN_CENTER
@@ -1009,43 +1011,63 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         curr_row += 1
         
-        # [MODIFIED] Swapped Remarks and Signature position
-        # Part 1: Signature Block (Moved to Top)
-        sig_start = curr_row
+        # [MODIFIED] Same-Row Logic for Signature (Left) and Remarks (Right)
         
-        # [MODIFIED] Party B info moved to Column 1 (Leftmost)
+        # Determine the shared starting row
+        start_footer = curr_row
+        
+        # --- 1. Party B Info (Left, starting at Column 1) ---
         sig_col_start = 1
         
-        ws.cell(sig_start, sig_col_start).value = "乙      方："
-        ws.cell(sig_start, sig_col_start).font = Font(name=FONT_MAIN, size=16) 
-        ws.cell(sig_start+1, sig_col_start+1).value = f"{client_name}"
-        ws.cell(sig_start+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(sig_start+2, sig_col_start).value = "統一編號："
-        ws.cell(sig_start+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(sig_start+3, sig_col_start).value = "客戶簽章："
-        ws.cell(sig_start+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer, sig_col_start).value = "乙      方："
+        ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        curr_row = sig_start + 4 # Move curr_row down after signature block
+        ws.cell(start_footer+1, sig_col_start+1).value = f"{client_name}"
+        ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        
+        ws.cell(start_footer+2, sig_col_start).value = "統一編號："
+        ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        
+        ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："
+        ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
-        # Part 2: Remarks Block (Moved to Bottom)
-        # [MODIFIED] Remarks start from Column 6 (F column)
+        # --- 2. Remarks (Right, starting at Column 6) ---
         r_col_start = 6 
         
-        ws.row_dimensions[curr_row].height = 25 
-        ws.cell(curr_row, r_col_start).value = "Remarks："
-        ws.cell(curr_row, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
+        # Remarks title on the same row as "乙 方："
+        ws.row_dimensions[start_footer].height = 25 
+        ws.cell(start_footer, r_col_start).value = "Remarks："
+        ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
+        
+        # Remarks content loop
+        # We need a separate row counter for remarks to avoid overwriting signature rows if remarks are short,
+        # or to extend beyond signature rows if remarks are long.
+        current_rem_row = start_footer
         
         for rm in remarks_list:
-            curr_row += 1
-            ws.row_dimensions[curr_row].height = 25 
+            current_rem_row += 1
+            ws.row_dimensions[current_rem_row].height = 25 
+            
             is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
             is_blue = rm.strip().startswith("6.")
             color = "000000"
             if is_red: color = "FF0000"
             if is_blue: color = "0000FF"
-            c = ws.cell(curr_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
+            
+            c = ws.cell(current_rem_row, r_col_start)
+            c.value = rm
+            c.font = Font(name=FONT_MAIN, size=16, color=color)
 
-        target_border_row = curr_row + 2
+        # --- 3. Determine Bottom Border Position ---
+        # The signature block is guaranteed to take 4 rows (start_footer to start_footer+3)
+        # The remarks block ends at current_rem_row
+        # We need the border to be below the lowest of the two.
+        
+        last_sig_row = start_footer + 3
+        last_content_row = max(last_sig_row, current_rem_row)
+        
+        target_border_row = last_content_row + 2
+
         for c_idx in range(1, total_cols + 1):
             ws.cell(target_border_row, c_idx).border = Border(bottom=SIDE_DOUBLE)
 
@@ -1466,7 +1488,7 @@ def main():
                     sorted_secs = sorted(secs)
                     for i, s in enumerate(sorted_secs):
                         if i < len(sorted_secs) - 1:
-                            v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}")
+                            v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}")
                             sec_shares[s] = v
                             rem -= v
                         else:
