@@ -823,7 +823,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         
         # [NEW] Add Sales Person Row for Dongwu (Simplified)
         ws.merge_cells(start_row=sig_start+2, start_column=1, end_row=sig_start+2, end_column=7)
-        ws.cell(sig_start+2, 1, sales_person).alignment = ALIGN_LEFT
+        ws.cell(sig_start+2, 1, sales_person).alignment = ALIGN_LEFT # Removed "承辦人員：" prefix
         ws.cell(sig_start+2, 1).font = FONT_STD
         
         right_start_col = 20 # Column T
@@ -1051,9 +1051,11 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             curr_row += 1
         
         curr_row += 1
+        ws.row_dimensions[curr_row].height = 25 # Fix Remarks Title Height
         ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True)
         for rm in remarks_list:
             curr_row += 1
+            ws.row_dimensions[curr_row].height = 25 # Fix Remarks Content Height
             is_red = rm.strip().startswith("1.") or rm.strip().startswith("4.")
             is_blue = rm.strip().startswith("6.")
             color = "000000"
@@ -1280,11 +1282,13 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         start_footer = curr_row
         
         r_col_start = 6 
+        ws.row_dimensions[start_footer].height = 25 # Fix Remarks Title Height
         ws.cell(start_footer, r_col_start).value = "Remarks："
         ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
         r_row = start_footer
         for rm in remarks_list:
             r_row += 1
+            ws.row_dimensions[r_row].height = 25 # Fix Remarks Content Height
             color = "000000"
             if rm.strip().startswith("1.") or rm.strip().startswith("4."): color = "FF0000"
             if rm.strip().startswith("6."): color = "0000FF"
@@ -1294,13 +1298,11 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.cell(start_footer, sig_col_start).value = "乙      方："
         ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         
-        # (2) Party B is Client
         ws.cell(start_footer+1, sig_col_start+1).value = client_name 
         ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："
         ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        # (2) Tax ID Blank
         ws.cell(start_footer+2, sig_col_start+2).value = "" 
         ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         
