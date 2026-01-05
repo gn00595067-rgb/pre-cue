@@ -244,8 +244,12 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     # Add Total Column Header (Right Side)
     th_total_right = f"<th rowspan='2' class='{header_cls}' style='min-width:50px;'>Total<br>Spots</th>"
 
+    # [修改區塊 Start] 調整 Medium 顯示邏輯，讓聲活與鉑霖也顯示選取的媒體
     unique_media = sorted(list(set([r['media'] for r in rows])))
-    medium_str = "/".join(unique_media) if format_type == "Dongwu" else "全家廣播/新鮮視/家樂福"
+    order_map = {"全家廣播": 1, "新鮮視": 2, "家樂福": 3}
+    unique_media.sort(key=lambda x: order_map.get(x, 99))
+    medium_str = "/".join(unique_media)
+    # [修改區塊 End]
     
     tbody = ""
     # Sort: 全家廣播 -> 新鮮視 -> 家樂福 -> seconds
