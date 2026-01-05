@@ -763,7 +763,6 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == 1: l = BS_MEDIUM 
             if c_idx == total_cols: r = BS_MEDIUM 
             if c_idx == 6: l = None 
-            if c_idx == 5: r = None  # 強制移除第 5 欄的右框線
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
 
         draw_outer_border_fast(ws, 5, 5, 1, 5) 
