@@ -26,30 +26,16 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 # =========================================================
 st.set_page_config(
     layout="wide",
-    page_title="Cue Sheet Pro v112.5 (Fixed API Auth)"
+    page_title="Cue Sheet Pro v112.5 (Logic Panel Added)"
 )
 
 # =============================================================================
 # 專案名稱: Cue Sheet Pro (媒體排程生成系統)
-# 功能描述: 
-#      1. 從 Google Sheets 讀取媒體參數與費率。
-#      2. 根據預算與走期，自動計算並分配每日檔次。
-#      3. 生成 HTML 預覽報表。
-#      4. 生成 Excel 排程表 (支援多種格式: Dongwu, Shenghuo, Bolin)。
-#      5. 透過 LibreOffice 將 Excel 轉檔為 PDF。
-#      6. 將最終資料與檔案上傳至 Ragic 資料庫。
-#
-# 系統依賴:
-#      - Python 3.x
-#      - LibreOffice (用於 xlsx -> pdf 轉檔，需確保 'soffice' 指令可用)
 # =============================================================================
 
 # =========================================================
 # 2. Session State 初始化 (State Initialization)
 # =========================================================
-# 管理使用者的全域狀態，包含登入狀態、預算佔比設定與 API 金鑰
-# [注意] 若 Ragic Key 失效，請在此處填入新的 Key
-
 DEFAULT_RAGIC_URL = "https://ap15.ragic.com/liuskyo/cue/2" 
 DEFAULT_RAGIC_KEY = "L04zZGhrVmtTV3pqN1VLbUpnOFZMa01NTHh3OUw3RUVlb0ovNXUrTXJsaGJhMWpKOUxHanFUODREMmN1dEZvcw==" 
 
@@ -73,21 +59,16 @@ for key, default_val in DEFAULT_STATES.items():
 # =========================================================
 # 3. 全域常數設定 (Global Constants)
 # =========================================================
-# 外部資源連結
 GSHEET_SHARE_URL = "https://docs.google.com/spreadsheets/d/1bzmG-N8XFsj8m3LUPqA8K70AcIqaK4Qhq1VPWcK0w_s/edit?usp=sharing"
 BOLIN_LOGO_URL = "https://docs.google.com/drawings/d/17Uqgp-7LJJj9E4bV7Azo7TwXESPKTTIsmTbf-9tU9eE/export/png"
 
-# 字型設定
 FONT_MAIN = "微軟正黑體"
-
-# Excel 樣式常數 (Openpyxl)
 BS_THIN = 'thin'
 BS_MEDIUM = 'medium'
 BS_HAIR = 'hair'
 FMT_MONEY = '"$"#,##0_);[Red]("$"#,##0)'
 FMT_NUMBER = '#,##0'
 
-# 邏輯運算常數
 REGIONS_ORDER = ["北區", "桃竹苗", "中區", "雲嘉南", "高屏", "東區"]
 DURATIONS = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60]
 REGION_DISPLAY_MAP = {
@@ -106,10 +87,6 @@ REGION_DISPLAY_MAP = {
 # =========================================================
 
 def parse_count_to_int(x):
-    """
-    將包含逗號或文字的數字字串轉換為整數。
-    例如: "1,234 店" -> 1234
-    """
     if x is None: return 0
     if isinstance(x, (int, float)): return int(x)
     s = str(x)
@@ -117,40 +94,28 @@ def parse_count_to_int(x):
     return int(m[0].replace(",", "")) if m else 0
 
 def safe_filename(name: str) -> str:
-    """去除檔名中的非法字元，確保存檔安全。"""
     return re.sub(r'[\\/*?:"<>|]', "_", name).strip()
 
 def html_escape(s):
-    """HTML 特殊字元跳脫，防止 XSS 或格式錯誤。"""
     if s is None: return ""
     return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;").replace("'", "&#39;")
 
 def region_display(region):
-    """取得區域的顯示名稱。"""
     return REGION_DISPLAY_MAP.get(region, region)
 
 def get_sec_factor(media_type, seconds, sec_factors):
-    """
-    取得秒數加成係數 (Factor)。
-    若查無特定秒數，則嘗試以標準秒數 (10, 20, 15, 30) 進行比例推算。
-    """
+    """取得秒數加成係數 (Factor)。"""
     factors = sec_factors.get(media_type)
     if not factors:
         if media_type == "新鮮視": factors = sec_factors.get("全家新鮮視")
         elif media_type == "全家廣播": factors = sec_factors.get("全家廣播")
     if not factors: return 1.0
     if seconds in factors: return factors[seconds]
-    # 比例推算邏輯
     for base in [10, 20, 15, 30]:
         if base in factors: return (seconds / base) * factors[base]
     return 1.0
 
 def calculate_schedule(total_spots, days):
-    """
-    計算每日排程 (Schedule Distribution)。
-    邏輯：將總檔次平均分配到天數，餘數優先分配給前幾天。
-    結果會乘以 2 (因為通常以 2 為最小單位或特定業務邏輯需求)。
-    """
     if days <= 0: return []
     if total_spots % 2 != 0: total_spots += 1
     base, rem = divmod(total_spots // 2, days)
@@ -158,7 +123,6 @@ def calculate_schedule(total_spots, days):
     return [x * 2 for x in sch]
 
 def get_remarks_text(sign_deadline, billing_month, payment_date):
-    """生成合約備註條款 (Remarks) 文字列表。"""
     d_str = sign_deadline.strftime("%Y/%m/%d (%a)") if sign_deadline else "____/__/__ (__)"
     p_str = payment_date.strftime("%Y/%m/%d") if payment_date else "____/__/__"
     return [
@@ -171,7 +135,6 @@ def get_remarks_text(sign_deadline, billing_month, payment_date):
     ]
 
 def format_campaign_details(config):
-    """將目前的投放設定 (Config) 轉為易讀的文字摘要，用於上傳資料庫。"""
     details = []
     for media, settings in config.items():
         sec_str = ", ".join([f"{s}秒({p}%)" for s, p in settings.get("sec_shares", {}).items()])
@@ -181,61 +144,32 @@ def format_campaign_details(config):
     return "\n".join(details)
 
 # =========================================================
-# Ragic API 整合 (核心修改區)
+# Ragic API 整合
 # =========================================================
 
 def upload_to_ragic(api_url, api_key, data_dict, files_dict=None):
-    """
-    上傳資料至 Ragic 資料庫。
-    
-    技術說明:
-    由於 requests.auth 預設的 Base64 編碼在某些環境下可能與 Ragic 不相容，
-    此處採用手動建構 'Authorization' Header 的方式以確保連線穩定。
-    同時支援 multipart/form-data 上傳檔案。
-    """
     if not api_url or not api_key:
         return False, "API URL 或 API Key 未設定"
-
-    # 1. 處理網址 (移除參數)
     base_url = api_url.split("?")[0]
-
-    # 2. 設定 Header (關鍵修正: 手動設定 Authorization)
     headers = {"Authorization": f"Basic {api_key}"}
-
-    # 3. 準備 Payload
-    # 將 api= 和 v=3 放入 form-data 中，這是 Ragic API 檔案上傳的標準做法
     payload = dict(data_dict)
-    payload["api"] = ""   # 告訴 Ragic 這是 API 呼叫
-    payload["v"] = "3"    # 使用 API v3
-
+    payload["api"] = ""   
+    payload["v"] = "3"    
     try:
-        # 發送 POST 請求
         resp = requests.post(
-            base_url,
-            headers=headers,  # 使用自訂 Header
-            data=payload,     # 資料與參數放這裡
-            files=files_dict, # 檔案放這裡
-            timeout=120       # 延長超時時間以免檔案大傳不完
+            base_url, headers=headers, data=payload, files=files_dict, timeout=120
         )
-
-        # 嘗試解析 JSON
         try:
             j = resp.json()
         except:
             j = None
-
         if resp.status_code != 200:
             return False, f"HTTP {resp.status_code}: {resp.text[:200]}"
-
         if not j:
             return False, f"Ragic 回傳非 JSON 格式: {resp.text[:200]}"
-
         if j.get("status") == "SUCCESS":
             return True, f"✅ 上傳成功! Ragic ID: {j.get('ragicId')}"
-
-        # 回傳 Ragic 的詳細錯誤代碼
         return False, f"❌ Ragic 錯誤 (Code: {j.get('code')}): {j.get('msg')}"
-
     except Exception as e:
         return False, f"❌ 連線異常: {str(e)}"
 
@@ -244,7 +178,6 @@ def upload_to_ragic(api_url, api_key, data_dict, files_dict=None):
 # =========================================================
 
 def find_soffice_path():
-    """尋找系統中的 LibreOffice 執行檔路徑 (Windows/Linux)。"""
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if soffice: return soffice
     if os.name == "nt":
@@ -255,7 +188,6 @@ def find_soffice_path():
 
 @st.cache_data(show_spinner="正在下載 Logo...", ttl=3600)
 def get_cloud_logo_bytes():
-    """下載雲端 Logo 圖檔並快取。"""
     try:
         response = requests.get(BOLIN_LOGO_URL, timeout=10)
         return response.content if response.status_code == 200 else None
@@ -263,20 +195,14 @@ def get_cloud_logo_bytes():
 
 @st.cache_data(show_spinner="正在生成 PDF (LibreOffice)...", ttl=3600)
 def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
-    """
-    使用 LibreOffice Headless 模式將 Excel 位元組流轉換為 PDF 位元組流。
-    需確保伺服器環境已安裝 LibreOffice。
-    """
     soffice = find_soffice_path()
     if not soffice: return None, "Fail", "伺服器未安裝 LibreOffice"
     try:
         with tempfile.TemporaryDirectory() as tmp:
             xlsx_path = os.path.join(tmp, "cue.xlsx")
             with open(xlsx_path, "wb") as f: f.write(xlsx_bytes)
-            # 執行轉檔指令
             subprocess.run([soffice, "--headless", "--nologo", "--convert-to", "pdf:calc_pdf_Export", "--outdir", tmp, xlsx_path], capture_output=True, timeout=60)
             pdf_path = os.path.join(tmp, "cue.pdf")
-            # 確保找到 PDF 檔案 (有時檔名可能會有微小差異)
             if not os.path.exists(pdf_path):
                 for fn in os.listdir(tmp):
                     if fn.endswith(".pdf"): pdf_path = os.path.join(tmp, fn); break
@@ -291,10 +217,6 @@ def xlsx_bytes_to_pdf_bytes(xlsx_bytes: bytes):
 # =========================================================
 
 def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, format_type, remarks, total_list, grand_total, budget, prod):
-    """
-    生成前端顯示用的 HTML 預覽表格。
-    根據 format_type 切換不同的 Header 樣式 (Dongwu/Bolin 等)。
-    """
     eff_days = days_cnt
     header_cls = "bg-sh-head"
     if format_type == "Dongwu": header_cls = "bg-dw-head"
@@ -326,7 +248,6 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
     daily_totals = [0] * eff_days
 
-    # 針對打包顯示 (Package Display) 進行分組處理
     for key, group in groupby(rows_sorted, lambda x: (x['media'], x['seconds'], x.get('nat_pkg_display', 0))):
         g_list = list(group)
         g_size = len(g_list)
@@ -358,7 +279,6 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
                 if d_idx < len(daily_totals): daily_totals[d_idx] += d
             tbody += f"<td style='font-weight:bold; background-color:#f0f0f0;'>{row_spots_sum}</td></tr>"
 
-    # 總計列
     total_row_html = "<tr><td colspan='5' style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>Total</td>"
     total_row_html += f"<td style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>${total_list:,}</td>"
     total_row_html += f"<td style='text-align:center; font-weight:bold; background-color:#e0e0e0;'>${budget:,}</td>"
@@ -390,10 +310,6 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
 
 @st.cache_data(ttl=300)
 def load_config_from_cloud(share_url):
-    """
-    從 Google Sheets 讀取設定檔 (Stores, Factors, Pricing)。
-    使用 Google Visualization API (gviz) 獲取 CSV 格式資料。
-    """
     try:
         match = re.search(r"/d/([a-zA-Z0-9-_]+)", share_url)
         if not match: return None, None, None, None, "連結格式錯誤"
@@ -402,13 +318,11 @@ def load_config_from_cloud(share_url):
             url = f"https://docs.google.com/spreadsheets/d/{file_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
             return pd.read_csv(url)
         
-        # 讀取店鋪數資料
         df_store = read_sheet("Stores")
         df_store.columns = [c.strip() for c in df_store.columns]
         store_counts = dict(zip(df_store['Key'], df_store['Display_Name']))
         store_counts_num = dict(zip(df_store['Key'], df_store['Count']))
         
-        # 讀取秒數加成資料
         df_fact = read_sheet("Factors")
         df_fact.columns = [c.strip() for c in df_fact.columns]
         sec_factors = {}
@@ -420,7 +334,6 @@ def load_config_from_cloud(share_url):
         for k, v in name_map.items():
             if k in sec_factors and v not in sec_factors: sec_factors[v] = sec_factors[k]
         
-        # 讀取價格資料
         df_price = read_sheet("Pricing")
         df_price.columns = [c.strip() for c in df_price.columns]
         pricing_db = {}
@@ -438,39 +351,106 @@ def load_config_from_cloud(share_url):
         return store_counts, store_counts_num, pricing_db, sec_factors, None
     except Exception as e: return None, None, None, None, f"讀取失敗: {str(e)}"
 
+# --- 新增: 運算邏輯面板渲染函式 ---
+def render_logic_panel(logs):
+    """
+    繪製運算邏輯面板
+    """
+    if not logs:
+        # st.warning("尚無運算紀錄")
+        return
+
+    st.markdown("### 🧮 運算邏輯詳細面板 (透明化運算)")
+    
+    # 將 log 分組顯示
+    for idx, item in enumerate(logs):
+        title = f"#{idx+1} 【{item['media']}】 {item['seconds']}秒 - {item['region']}"
+        with st.expander(title, expanded=False):
+            # 摘要數據區
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("分配預算 (Budget)", f"${int(item['budget']):,}")
+            c2.metric("單檔成本 (Unit Cost)", f"${item['unit_cost_actual']:.2f}")
+            c3.metric("秒數係數 (Factor)", f"{item['factor']}")
+            c4.metric("最終檔次 (Spots)", item['spots'])
+            
+            st.markdown("---")
+            # 詳細邏輯區
+            st.markdown("#### 1. 基礎參數")
+            st.text(f"• 媒體與區域: {item['media']} ({item['region']})")
+            st.text(f"• 實作價 (Net Price): ${item['base_net_price']:,} (依據 Pricing 表)")
+            st.text(f"• 標準檔次 (Std Spots): {item['std_spots']} 檔")
+            st.text(f"• 秒數: {item['seconds']}秒 (Factor: {item['factor']})")
+            
+            st.markdown("#### 2. 單檔成本計算")
+            st.latex(r"\text{Unit Cost} = \frac{\text{Net Price}}{\text{Std Spots}} \times \text{Factor}")
+            st.code(f"{item['base_net_price']} / {item['std_spots']} * {item['factor']} = {item['unit_cost_actual']:.4f}")
+            
+            st.markdown("#### 3. 檔次計算與懲罰判定")
+            st.text(f"• 初估檔次 = 預算 / 單檔成本 = {item['budget']:.0f} / {item['unit_cost_actual']:.2f} = {item['spots_init_raw']:.2f}")
+            
+            if item['is_under_target']:
+                st.error(f"⚠️ 觸發懲罰機制: 初估檔次 {math.ceil(item['spots_init_raw'])} < 標準檔次 {item['std_spots']}")
+                st.markdown("**懲罰內容：總檔次除以 1.1 (費用不變，檔次變少)**")
+                st.latex(r"\text{Final Spots} = \text{Ceil}\left(\frac{\text{Budget}}{\text{Unit Cost} \times 1.1}\right)")
+                st.code(f"{item['budget']:.0f} / ({item['unit_cost_actual']:.2f} * 1.1) = {item['spots_final_raw_penalty']:.2f} -> 無條件進位 -> {item['spots']}")
+            else:
+                st.success(f"✅ 符合標準: 初估檔次 {math.ceil(item['spots_init_raw'])} >= 標準檔次 {item['std_spots']}")
+                st.markdown("**無懲罰**")
+                st.latex(r"\text{Final Spots} = \text{Ceil}\left(\frac{\text{Budget}}{\text{Unit Cost}}\right)")
+            
+            if item.get('note'):
+                st.info(f"備註: {item['note']}")
+
+
 def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factors, store_counts_num, regions_order):
     """
-    排程運算核心函式。
-    
-    Args:
-        config (dict): 使用者的投放設定
-        total_budget (int): 總預算
-        days_count (int): 走期天數
-    Returns:
-        rows (list): 運算後的每一行詳細資料 (包含排程、價格)
-        total_list_accum (int): 定價總和
-        logs (list): 執行紀錄
+    排程運算核心函式 (已增加邏輯記錄功能)
     """
     rows, total_list_accum = [], 0
+    logs = [] # 初始化日誌列表
+
     for m, cfg in config.items():
         # 根據各媒體的預算佔比 (Share) 分配預算
         m_budget_total = total_budget * (cfg["share"] / 100.0)
+        
         for sec, sec_pct in cfg["sec_shares"].items():
             s_budget = m_budget_total * (sec_pct / 100.0)
             if s_budget <= 0: continue
+            
             factor = get_sec_factor(m, sec, sec_factors)
             
+            # --- 邏輯 A: 廣播與新鮮視 ---
             if m in ["全家廣播", "新鮮視"]:
                 db = pricing_db[m]
                 calc_regs = ["全省"] if cfg["is_national"] else cfg["regions"]
                 display_regs = regions_order if cfg["is_national"] else cfg["regions"]
-                unit_net_sum = sum([(db[r][1] / db["Std_Spots"]) * factor for r in calc_regs])
+                
+                # 計算單位成本總和 (如果是全省，就是各區單價加總或直接取全省價)
+                # 這裡為了能夠還原 "實作價"，我們需要知道用的是哪個 Base Net
+                # 因為程式邏輯是: unit_net_sum = sum( (Region_Net / Std_Spots) * Factor )
+                
+                # 為了 Log 清晰，我們反推 "總實作價 (Net Price Sum)"
+                base_net_price_sum = 0
+                std_spots_ref = db["Std_Spots"] # 4800 or 5040
+                
+                # 核心運算
+                unit_net_sum = 0
+                for r in calc_regs:
+                     # 取得該區域(或全省)的實作價
+                    reg_net = db[r][1] 
+                    base_net_price_sum += reg_net
+                    # 算出該區域的單檔成本
+                    unit_net_sum += (reg_net / std_spots_ref) * factor
+                
                 if unit_net_sum == 0: continue
                 
                 # 計算檔次 (Spots)
-                spots_init = math.ceil(s_budget / unit_net_sum)
-                is_under_target = spots_init < db["Std_Spots"]
+                spots_init_raw = s_budget / unit_net_sum
+                spots_init = math.ceil(spots_init_raw)
+                
+                is_under_target = spots_init < std_spots_ref
                 calc_penalty = 1.1 if is_under_target else 1.0 
+                
                 if cfg["is_national"]:
                     row_display_penalty = 1.0
                     total_display_penalty = 1.1 if is_under_target else 1.0
@@ -478,10 +458,31 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                     row_display_penalty = 1.1 if is_under_target else 1.0
                     total_display_penalty = 1.0 
                 
-                spots_final = math.ceil(s_budget / (unit_net_sum * calc_penalty))
+                # 最終檔次計算
+                spots_final_raw = s_budget / (unit_net_sum * calc_penalty)
+                spots_final = math.ceil(spots_final_raw)
+                
                 if spots_final % 2 != 0: spots_final += 1
                 if spots_final == 0: spots_final = 2
                 
+                # --- [新增] 記錄運算邏輯 ---
+                logs.append({
+                    "media": m,
+                    "region": "全省聯播" if cfg["is_national"] else "/".join(cfg["regions"]),
+                    "seconds": sec,
+                    "budget": s_budget,
+                    "base_net_price": base_net_price_sum, # 總實作價
+                    "std_spots": std_spots_ref,            # 標準檔次
+                    "factor": factor,                      # 秒數係數
+                    "unit_cost_actual": unit_net_sum,      # 加成後的單檔成本
+                    "spots_init_raw": spots_init_raw,
+                    "is_under_target": is_under_target,
+                    "spots_final_raw_penalty": spots_final_raw,
+                    "spots": spots_final,
+                    "note": "若選全省聯播，實作價為全省定價；若選區域，則為各區實作價加總。"
+                })
+                # -------------------------
+
                 # 計算每日分配
                 sch = calculate_schedule(spots_final, days_count)
                 
@@ -506,15 +507,45 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                         "rate_display": total_rate_display, "pkg_display": row_pkg_display,
                         "is_pkg_member": cfg["is_national"], "nat_pkg_display": nat_pkg_display
                     })
+            
+            # --- 邏輯 B: 家樂福 ---
             elif m == "家樂福":
                 db = pricing_db["家樂福"]
                 base_std = db["量販_全省"]["Std_Spots"]
-                unit_net = (db["量販_全省"]["Net"] / base_std) * factor
-                spots_init = math.ceil(s_budget / unit_net)
-                penalty = 1.1 if spots_init < base_std else 1.0
-                spots_final = math.ceil(s_budget / (unit_net * penalty))
+                base_net_price = db["量販_全省"]["Net"]
+                
+                # 核心運算
+                unit_net = (base_net_price / base_std) * factor
+                
+                spots_init_raw = s_budget / unit_net
+                spots_init = math.ceil(spots_init_raw)
+                
+                is_under_target = spots_init < base_std
+                penalty = 1.1 if is_under_target else 1.0
+                
+                spots_final_raw = s_budget / (unit_net * penalty)
+                spots_final = math.ceil(spots_final_raw)
+                
                 if spots_final % 2 != 0: spots_final += 1
                 
+                # --- [新增] 記錄運算邏輯 ---
+                logs.append({
+                    "media": m,
+                    "region": "全省量販+超市",
+                    "seconds": sec,
+                    "budget": s_budget,
+                    "base_net_price": base_net_price,
+                    "std_spots": base_std,
+                    "factor": factor,
+                    "unit_cost_actual": unit_net,
+                    "spots_init_raw": spots_init_raw,
+                    "is_under_target": is_under_target,
+                    "spots_final_raw_penalty": spots_final_raw,
+                    "spots": spots_final,
+                    "note": f"超市檔次會依照比例自動計算 (量販:{spots_final})"
+                })
+                # -------------------------
+
                 sch_h = calculate_schedule(spots_final, days_count)
                 base_list = db["量販_全省"]["List"]
                 unit_rate_h = int((base_list / base_std) * factor * penalty)
@@ -526,6 +557,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                     "daypart": db["量販_全省"]["Day_Part"], "seconds": sec, "spots": spots_final, "schedule": sch_h,
                     "rate_display": total_rate_h, "pkg_display": total_rate_h, "is_pkg_member": False
                 })
+                
                 # 家樂福超市的檔次是依照量販比例計算
                 spots_s = int(spots_final * (db["超市_全省"]["Std_Spots"] / base_std))
                 sch_s = calculate_schedule(spots_s, days_count)
@@ -534,7 +566,8 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                     "daypart": db["超市_全省"]["Day_Part"], "seconds": sec, "spots": spots_s, "schedule": sch_s,
                     "rate_display": "計量販", "pkg_display": "計量販", "is_pkg_member": False
                 })
-    return rows, total_list_accum, []
+                
+    return rows, total_list_accum, logs
 
 # =========================================================
 # 6. Excel 渲染引擎 (Excel Rendering Engines)
@@ -542,10 +575,6 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost, sales_person):
-    """
-    Excel 生成工廠函式。
-    根據 format_type 調用對應的子渲染引擎 (Dongwu/Shenghuo/Bolin)。
-    """
     
     # Common Excel Styles
     SIDE_THIN, SIDE_MEDIUM, SIDE_HAIR = Side(style=BS_THIN), Side(style=BS_MEDIUM), Side(style=BS_HAIR)
@@ -1155,12 +1184,7 @@ def main():
                     st.session_state[k2] = rem - st.session_state[k1]
 
         def on_sec_slider_change(media_prefix, changed_sec, all_secs):
-            """
-            新增的秒數自動平衡邏輯。
-            media_prefix: 例如 'rs_' (Radio Seconds)
-            changed_sec: 當前被拖動的秒數 (int)
-            all_secs: 所有選中的秒數列表 (list of int)
-            """
+            """新增的秒數自動平衡邏輯。"""
             key_changed = f"{media_prefix}{changed_sec}"
             new_val = st.session_state[key_changed]
             rem = 100 - new_val
@@ -1170,24 +1194,18 @@ def main():
                 st.session_state[key_changed] = 100
                 return
 
-            # 計算其他項目目前的總和
             current_sum_others = sum([st.session_state[f"{media_prefix}{s}"] for s in others])
             
             for i, s in enumerate(others):
                 other_key = f"{media_prefix}{s}"
                 if current_sum_others == 0:
-                    # 如果其他項目原本都是0，則平均分配剩餘值
                     new_other_val = rem // len(others)
-                    # 最後一個拿剩下的餘數，避免除不盡
                     if i == len(others) - 1:
                         new_other_val = rem - sum([st.session_state[f"{media_prefix}{x}"] for x in others if x != s])
                 else:
-                    # 依原本比例分配剩餘值
                     ratio = st.session_state[other_key] / current_sum_others
                     new_other_val = int(rem * ratio)
-                    # 最後一個修正誤差
                     if i == len(others) - 1:
-                        # 重新計算已經分配出去的量
                         allocated = new_val + sum([st.session_state[f"{media_prefix}{x}"] for x in others if x != s])
                         new_other_val = 100 - allocated
                 
@@ -1200,7 +1218,7 @@ def main():
         m1, m2, m3 = st.columns(3)
         config = {}
         
-        # --- 媒體參數設定 UI 區塊 (修改後) ---
+        # --- 媒體參數設定 UI 區塊 ---
         if is_rad:
             with m1:
                 st.markdown("#### 📻 全家廣播")
@@ -1214,10 +1232,8 @@ def main():
                 secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
                 st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
                 
-                # 初始化秒數佔比 Session State
                 sorted_secs = sorted(secs)
                 if sorted_secs:
-                    # 檢查並初始化尚未存在的 key
                     keys_to_check = [f"rs_{s}" for s in sorted_secs]
                     if any(k not in st.session_state for k in keys_to_check):
                         default_val = 100 // len(sorted_secs)
@@ -1228,7 +1244,6 @@ def main():
                             else:
                                 st.session_state[k] = default_val
                     
-                    # 渲染 Slider
                     sec_shares = {}
                     for s in sorted_secs:
                         st.slider(
@@ -1254,7 +1269,6 @@ def main():
                 secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
                 st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
                 
-                # 初始化秒數佔比 Session State
                 sorted_secs = sorted(secs)
                 if sorted_secs:
                     keys_to_check = [f"fs_{s}" for s in sorted_secs]
@@ -1285,7 +1299,6 @@ def main():
                 secs = st.multiselect("秒數", DURATIONS, [20], key="cf_sec")
                 st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
                 
-                # 初始化秒數佔比 Session State
                 sorted_secs = sorted(secs)
                 if sorted_secs:
                     keys_to_check = [f"cs_{s}" for s in sorted_secs]
@@ -1322,6 +1335,10 @@ def main():
             
             html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
             st.components.v1.html(html_preview, height=700, scrolling=True)
+            
+            # ========== [新增] 插入運算邏輯面板 ==========
+            render_logic_panel(logs)
+            # ===========================================
             
             st.markdown("---")
             st.subheader("📥 檔案下載區")
