@@ -34,7 +34,7 @@ st.set_page_config(
 # =========================================================
 # [注意] 請在此填入您 "重新產生" 後的新 API Key
 DEFAULT_RAGIC_URL = "https://ap15.ragic.com/liuskyo/cue/2" 
-DEFAULT_RAGIC_KEY = ""  # <--- 請在這裡貼上新的 API Key
+DEFAULT_RAGIC_KEY = "L04zZGhrVmtTV3pqN1VLbUpnOFZMa01NTHh3OUw3RUVlb0ovNXUrTXJsaGJhMWpKOUxHanFUODREMmN1dEZvcw=="  # <--- 請在這裡貼上新的 API Key
 
 DEFAULT_STATES = {
     "is_supervisor": False,
