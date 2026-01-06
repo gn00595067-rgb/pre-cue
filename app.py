@@ -32,16 +32,16 @@ st.set_page_config(
 # =============================================================================
 # 專案名稱: Cue Sheet Pro (媒體排程生成系統)
 # 功能描述: 
-#     1. 從 Google Sheets 讀取媒體參數與費率。
-#     2. 根據預算與走期，自動計算並分配每日檔次。
-#     3. 生成 HTML 預覽報表。
-#     4. 生成 Excel 排程表 (支援多種格式: Dongwu, Shenghuo, Bolin)。
-#     5. 透過 LibreOffice 將 Excel 轉檔為 PDF。
-#     6. 將最終資料與檔案上傳至 Ragic 資料庫。
+#      1. 從 Google Sheets 讀取媒體參數與費率。
+#      2. 根據預算與走期，自動計算並分配每日檔次。
+#      3. 生成 HTML 預覽報表。
+#      4. 生成 Excel 排程表 (支援多種格式: Dongwu, Shenghuo, Bolin)。
+#      5. 透過 LibreOffice 將 Excel 轉檔為 PDF。
+#      6. 將最終資料與檔案上傳至 Ragic 資料庫。
 #
 # 系統依賴:
-#     - Python 3.x
-#     - LibreOffice (用於 xlsx -> pdf 轉檔，需確保 'soffice' 指令可用)
+#      - Python 3.x
+#      - LibreOffice (用於 xlsx -> pdf 轉檔，需確保 'soffice' 指令可用)
 # =============================================================================
 
 # =========================================================
@@ -855,7 +855,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws.cell(r_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         sig_col_start = 1
-        ws.cell(start_footer, sig_col_start).value = "乙       方："; ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer, sig_col_start).value = "乙        方："; ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         ws.cell(start_footer+1, sig_col_start+1).value = f"{client_name}"; ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："; ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："; ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
@@ -1004,7 +1004,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             c = ws.cell(r_row, r_col_start); c.value = rm; c.font = Font(name=FONT_MAIN, size=16, color=color)
 
         sig_col_start = 1
-        ws.cell(start_footer, sig_col_start).value = "乙       方："; ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer, sig_col_start).value = "乙        方："; ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         ws.cell(start_footer+1, sig_col_start+1).value = client_name; ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："; ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
         ws.cell(start_footer+2, sig_col_start+2).value = ""; ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
@@ -1185,6 +1185,8 @@ def main():
                             rem -= v
                         else:
                             sec_shares[s] = rem
+                            # <--- 修改處: 顯示自動計算的剩餘佔比
+                            st.slider(f"{s}秒 % (自動計算)", 0, 100, rem, disabled=True, key=f"rs_{s}_auto")
                 elif secs:
                     sec_shares[secs[0]] = 100
                 config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
@@ -1213,6 +1215,8 @@ def main():
                             rem -= v
                         else:
                             sec_shares[s] = rem
+                            # <--- 修改處: 顯示自動計算的剩餘佔比
+                            st.slider(f"{s}秒 % (自動計算)", 0, 100, rem, disabled=True, key=f"fs_{s}_auto")
                 elif secs:
                     sec_shares[secs[0]] = 100
                 config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
@@ -1234,6 +1238,8 @@ def main():
                             rem -= v
                         else:
                             sec_shares[s] = rem
+                            # <--- 修改處: 顯示自動計算的剩餘佔比
+                            st.slider(f"{s}秒 % (自動計算)", 0, 100, rem, disabled=True, key=f"cs_{s}_auto")
                 elif secs:
                     sec_shares[secs[0]] = 100
                 config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
