@@ -170,20 +170,28 @@ def format_campaign_details(config):
     return "\n".join(details)
 
 # [新增] Ragic 上傳函式
+# [修正版] Ragic 上傳函式 (強制在網址帶入 Key，解決 Guest 錯誤)
 def upload_to_ragic(api_url, api_key, data_dict, files_dict=None):
     if not api_url or not api_key:
         return False, "API URL 或 API Key 未設定"
     
-    # 處理 URL (移除可能多餘的參數並加上 api)
+    # 1. 處理網址，移除可能多餘的參數
     base_url = api_url.split('?')[0]
-    target_url = f"{base_url}?api"
+    
+    # 2. 【關鍵修正】將 API Key 直接放入參數 params 中
+    # Ragic 支援 ?api&APIKey=... 的寫法，這能避開 Header 被擋的問題
+    params = {
+        "api": "",          # 宣告這是 API 呼叫
+        "APIKey": api_key   # 直接在網址列帶入 Key
+    }
     
     try:
-        # Ragic 使用 Basic Auth，不需要另外 encode，requests auth 參數會自動處理
-        # 預設 Ragic API Key 當作帳號，密碼留空
+        # 發送 POST 請求
+        # 我們同時保留 auth=(api_key, '') 作為備用，雙重保險
         response = requests.post(
-            target_url, 
-            auth=(api_key, ''), 
+            base_url, 
+            params=params,          # 修正點：加入 params
+            auth=(api_key, ''),     # 保留 Basic Auth
             data=data_dict, 
             files=files_dict,
             timeout=60
@@ -192,15 +200,18 @@ def upload_to_ragic(api_url, api_key, data_dict, files_dict=None):
         if response.status_code == 200:
             resp_json = response.json()
             if resp_json.get('status') == 'SUCCESS':
-                return True, f"上傳成功! (Ragic ID: {resp_json.get('ragicId')})"
+                return True, f"✅ 上傳成功! Ragic ID: {resp_json.get('ragicId')}"
             else:
-                return False, f"Ragic 回傳錯誤: {resp_json.get('msg')}"
+                # 取得更詳細的錯誤訊息
+                msg = resp_json.get('msg', '未知錯誤')
+                if "access right" in msg:
+                    return False, f"⚠️ 權限不足: 請確認此 API Key 的使用者是否有該表單的「新增/修改」權限。"
+                return False, f"❌ Ragic 回傳錯誤: {msg}"
         else:
-            return False, f"HTTP 錯誤: {response.status_code} - {response.text}"
+            return False, f"❌ HTTP 連線錯誤: {response.status_code} - {response.text}"
             
     except Exception as e:
-        return False, f"連線異常: {str(e)}"
-
+        return False, f"❌ 連線異常: {str(e)}"
 def find_soffice_path():
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if soffice:
