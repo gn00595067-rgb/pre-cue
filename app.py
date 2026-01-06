@@ -1377,21 +1377,21 @@ def main():
                                 
                                 # Ragic 欄位對照表 (請勿隨意修改 ID)
                                 RAGIC_MAP = {
-                                    'client':     '1000080', 
-                                    'product':    '1000081', 
-                                    'budget_raw': '1000082', 
-                                    'budget_fin': '1000083', 
-                                    'prod_cost':  '1000084', 
-                                    'format':     '1000078', 
-                                    'sales':      '1000079', 
-                                    'date_start': '1000085', 
-                                    'date_end':   '1000086', 
-                                    'date_sign':  '1000087', 
-                                    'bill_month': '1000089', 
-                                    'date_pay':   '1000088', 
-                                    'details':    '1000090', 
-                                    'file_xls':   '1000091', 
-                                    'file_pdf':   '1000092'  
+                                    'client':     '1000080',  # 客戶名稱
+                                    'product':    '1000081',  # 產品名稱
+                                    'budget_raw': '1000082',  # 總預算 (未稅 Net)
+                                    'budget_fin': '1000083',  # 最終成交價 (主管覆寫後)
+                                    'prod_cost':  '1000084',  # 製作費
+                                    'format':     '1000078',  # 報表格式 (Dongwu/Shenghuo/Bolin)
+                                    'sales':      '1000079',  # 業務名稱
+                                    'date_start': '1000085',  # 開始日
+                                    'date_end':   '1000086',  # 結束日
+                                    'date_sign':  '1000087',  # 回簽截止日
+                                    'bill_month': '1000089',  # 請款月份
+                                    'date_pay':   '1000088',  # 付款兌現日
+                                    'details':    '1000090',  # 詳細投放設定摘要
+                                    'file_xls':   '1000091',  # Excel 檔案上傳欄位
+                                    'file_pdf':   '1000092'   # PDF 檔案上傳欄位
                                 }
 
                                 campaign_summary = format_campaign_details(config)
