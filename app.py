@@ -856,8 +856,9 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         sig_col_start = 1
         ws.cell(start_footer, sig_col_start).value = "乙        方："; ws.cell(start_footer, sig_col_start).font = Font(name=FONT_MAIN, size=16)
-        ws.cell(start_footer+1, sig_col_start+1).value = f"{client_name}"; ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+1, sig_col_start+1).value = client_name; ws.cell(start_footer+1, sig_col_start+1).font = Font(name=FONT_MAIN, size=16)
         ws.cell(start_footer+2, sig_col_start).value = "統一編號："; ws.cell(start_footer+2, sig_col_start).font = Font(name=FONT_MAIN, size=16)
+        ws.cell(start_footer+2, sig_col_start+2).value = ""; ws.cell(start_footer+2, sig_col_start+2).font = Font(name=FONT_MAIN, size=16)
         ws.cell(start_footer+3, sig_col_start).value = "客戶簽章："; ws.cell(start_footer+3, sig_col_start).font = Font(name=FONT_MAIN, size=16)
 
         target_border_row = r_row + 2
@@ -1129,7 +1130,7 @@ def main():
             st.session_state[active[0]] += rem
 
         def on_slider_change(changed_key):
-            """滑桿拉動時的自動平衡邏輯"""
+            """滑桿拉動時的自動平衡邏輯 (媒體佔比用)"""
             active = []
             if st.session_state.get("cb_rad"): active.append("rad_share")
             if st.session_state.get("cb_fv"): active.append("fv_share")
@@ -1153,6 +1154,45 @@ def main():
                     st.session_state[k1] = int(rem * ratio)
                     st.session_state[k2] = rem - st.session_state[k1]
 
+        def on_sec_slider_change(media_prefix, changed_sec, all_secs):
+            """
+            新增的秒數自動平衡邏輯。
+            media_prefix: 例如 'rs_' (Radio Seconds)
+            changed_sec: 當前被拖動的秒數 (int)
+            all_secs: 所有選中的秒數列表 (list of int)
+            """
+            key_changed = f"{media_prefix}{changed_sec}"
+            new_val = st.session_state[key_changed]
+            rem = 100 - new_val
+            
+            others = [s for s in all_secs if s != changed_sec]
+            if not others:
+                st.session_state[key_changed] = 100
+                return
+
+            # 計算其他項目目前的總和
+            current_sum_others = sum([st.session_state[f"{media_prefix}{s}"] for s in others])
+            
+            for i, s in enumerate(others):
+                other_key = f"{media_prefix}{s}"
+                if current_sum_others == 0:
+                    # 如果其他項目原本都是0，則平均分配剩餘值
+                    new_other_val = rem // len(others)
+                    # 最後一個拿剩下的餘數，避免除不盡
+                    if i == len(others) - 1:
+                        new_other_val = rem - sum([st.session_state[f"{media_prefix}{x}"] for x in others if x != s])
+                else:
+                    # 依原本比例分配剩餘值
+                    ratio = st.session_state[other_key] / current_sum_others
+                    new_other_val = int(rem * ratio)
+                    # 最後一個修正誤差
+                    if i == len(others) - 1:
+                        # 重新計算已經分配出去的量
+                        allocated = new_val + sum([st.session_state[f"{media_prefix}{x}"] for x in others if x != s])
+                        new_other_val = 100 - allocated
+                
+                st.session_state[other_key] = max(0, new_other_val)
+
         is_rad = col_cb1.checkbox("全家廣播", key="cb_rad", on_change=on_media_change)
         is_fv = col_cb2.checkbox("新鮮視", key="cb_fv", on_change=on_media_change)
         is_cf = col_cb3.checkbox("家樂福", key="cb_cf", on_change=on_media_change)
@@ -1160,7 +1200,7 @@ def main():
         m1, m2, m3 = st.columns(3)
         config = {}
         
-        # --- 媒體參數設定 UI 區塊 ---
+        # --- 媒體參數設定 UI 區塊 (修改後) ---
         if is_rad:
             with m1:
                 st.markdown("#### 📻 全家廣播")
@@ -1174,22 +1214,32 @@ def main():
                 secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
                 st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
                 
-                sec_shares = {}
-                if len(secs) > 1:
-                    rem = 100
-                    sorted_secs = sorted(secs)
-                    for i, s in enumerate(sorted_secs):
-                        if i < len(sorted_secs) - 1:
-                            v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"rs_{s}")
-                            sec_shares[s] = v
-                            rem -= v
-                        else:
-                            sec_shares[s] = rem
-                            # <--- 修改處: 顯示自動計算的剩餘佔比
-                            st.slider(f"{s}秒 % (自動計算)", 0, 100, rem, disabled=True, key=f"rs_{s}_auto")
-                elif secs:
-                    sec_shares[secs[0]] = 100
-                config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
+                # 初始化秒數佔比 Session State
+                sorted_secs = sorted(secs)
+                if sorted_secs:
+                    # 檢查並初始化尚未存在的 key
+                    keys_to_check = [f"rs_{s}" for s in sorted_secs]
+                    if any(k not in st.session_state for k in keys_to_check):
+                        default_val = 100 // len(sorted_secs)
+                        for i, s in enumerate(sorted_secs):
+                            k = f"rs_{s}"
+                            if i == len(sorted_secs) - 1:
+                                st.session_state[k] = 100 - (default_val * (len(sorted_secs)-1))
+                            else:
+                                st.session_state[k] = default_val
+                    
+                    # 渲染 Slider
+                    sec_shares = {}
+                    for s in sorted_secs:
+                        st.slider(
+                            f"{s}秒 %", 0, 100, 
+                            key=f"rs_{s}", 
+                            on_change=on_sec_slider_change, 
+                            args=("rs_", s, sorted_secs)
+                        )
+                        sec_shares[s] = st.session_state[f"rs_{s}"]
+                    
+                    config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
 
         if is_fv:
             with m2:
@@ -1204,22 +1254,30 @@ def main():
                 secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
                 st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
                 
-                sec_shares = {}
-                if len(secs) > 1:
-                    rem = 100
-                    sorted_secs = sorted(secs)
-                    for i, s in enumerate(sorted_secs):
-                        if i < len(sorted_secs) - 1:
-                            v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"fs_{s}")
-                            sec_shares[s] = v
-                            rem -= v
-                        else:
-                            sec_shares[s] = rem
-                            # <--- 修改處: 顯示自動計算的剩餘佔比
-                            st.slider(f"{s}秒 % (自動計算)", 0, 100, rem, disabled=True, key=f"fs_{s}_auto")
-                elif secs:
-                    sec_shares[secs[0]] = 100
-                config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
+                # 初始化秒數佔比 Session State
+                sorted_secs = sorted(secs)
+                if sorted_secs:
+                    keys_to_check = [f"fs_{s}" for s in sorted_secs]
+                    if any(k not in st.session_state for k in keys_to_check):
+                        default_val = 100 // len(sorted_secs)
+                        for i, s in enumerate(sorted_secs):
+                            k = f"fs_{s}"
+                            if i == len(sorted_secs) - 1:
+                                st.session_state[k] = 100 - (default_val * (len(sorted_secs)-1))
+                            else:
+                                st.session_state[k] = default_val
+                    
+                    sec_shares = {}
+                    for s in sorted_secs:
+                        st.slider(
+                            f"{s}秒 %", 0, 100, 
+                            key=f"fs_{s}", 
+                            on_change=on_sec_slider_change, 
+                            args=("fs_", s, sorted_secs)
+                        )
+                        sec_shares[s] = st.session_state[f"fs_{s}"]
+                    
+                    config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
 
         if is_cf:
             with m3:
@@ -1227,22 +1285,30 @@ def main():
                 secs = st.multiselect("秒數", DURATIONS, [20], key="cf_sec")
                 st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
                 
-                sec_shares = {}
-                if len(secs) > 1:
-                    rem = 100
-                    sorted_secs = sorted(secs)
-                    for i, s in enumerate(sorted_secs):
-                        if i < len(sorted_secs) - 1:
-                            v = st.slider(f"{s}秒 %", 0, rem, int(rem/2), key=f"cs_{s}")
-                            sec_shares[s] = v
-                            rem -= v
-                        else:
-                            sec_shares[s] = rem
-                            # <--- 修改處: 顯示自動計算的剩餘佔比
-                            st.slider(f"{s}秒 % (自動計算)", 0, 100, rem, disabled=True, key=f"cs_{s}_auto")
-                elif secs:
-                    sec_shares[secs[0]] = 100
-                config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
+                # 初始化秒數佔比 Session State
+                sorted_secs = sorted(secs)
+                if sorted_secs:
+                    keys_to_check = [f"cs_{s}" for s in sorted_secs]
+                    if any(k not in st.session_state for k in keys_to_check):
+                        default_val = 100 // len(sorted_secs)
+                        for i, s in enumerate(sorted_secs):
+                            k = f"cs_{s}"
+                            if i == len(sorted_secs) - 1:
+                                st.session_state[k] = 100 - (default_val * (len(sorted_secs)-1))
+                            else:
+                                st.session_state[k] = default_val
+                    
+                    sec_shares = {}
+                    for s in sorted_secs:
+                        st.slider(
+                            f"{s}秒 %", 0, 100, 
+                            key=f"cs_{s}", 
+                            on_change=on_sec_slider_change, 
+                            args=("cs_", s, sorted_secs)
+                        )
+                        sec_shares[s] = st.session_state[f"cs_{s}"]
+                
+                    config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
 
         # --- 運算與輸出邏輯 ---
         if config:
