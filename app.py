@@ -21,30 +21,28 @@ from openpyxl.utils import get_column_letter, column_index_from_string
 from openpyxl.styles import Alignment, Font, Border, Side, PatternFill
 from openpyxl.drawing.image import Image as OpenpyxlImage
 
-"""
-=============================================================================
-專案名稱: Cue Sheet Pro (媒體排程生成系統)
-功能描述: 
-    1. 從 Google Sheets 讀取媒體參數與費率。
-    2. 根據預算與走期，自動計算並分配每日檔次。
-    3. 生成 HTML 預覽報表。
-    4. 生成 Excel 排程表 (支援多種格式: Dongwu, Shenghuo, Bolin)。
-    5. 透過 LibreOffice 將 Excel 轉檔為 PDF。
-    6. 將最終資料與檔案上傳至 Ragic 資料庫。
-
-系統依賴:
-    - Python 3.x
-    - LibreOffice (用於 xlsx -> pdf 轉檔，需確保 'soffice' 指令可用)
-=============================================================================
-"""
-
 # =========================================================
-# 1. 頁面設定 (Page Config)
+# 1. 頁面設定 (Page Config) - 必須放在最上方
 # =========================================================
 st.set_page_config(
     layout="wide",
     page_title="Cue Sheet Pro v112.5 (Fixed API Auth)"
 )
+
+# =============================================================================
+# 專案名稱: Cue Sheet Pro (媒體排程生成系統)
+# 功能描述: 
+#     1. 從 Google Sheets 讀取媒體參數與費率。
+#     2. 根據預算與走期，自動計算並分配每日檔次。
+#     3. 生成 HTML 預覽報表。
+#     4. 生成 Excel 排程表 (支援多種格式: Dongwu, Shenghuo, Bolin)。
+#     5. 透過 LibreOffice 將 Excel 轉檔為 PDF。
+#     6. 將最終資料與檔案上傳至 Ragic 資料庫。
+#
+# 系統依賴:
+#     - Python 3.x
+#     - LibreOffice (用於 xlsx -> pdf 轉檔，需確保 'soffice' 指令可用)
+# =============================================================================
 
 # =========================================================
 # 2. Session State 初始化 (State Initialization)
