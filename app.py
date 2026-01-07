@@ -242,12 +242,12 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
 
     th_fixed = "".join([f"<th rowspan='2' class='{header_cls}'>{c}</th>" for c in cols_def])
     th_total_right = f"<th rowspan='2' class='{header_cls}' style='min-width:50px;'>Total<br>Spots</th>"
-     
+      
     unique_media = sorted(list(set([r['media'] for r in rows])))
     order_map = {"全家廣播": 1, "新鮮視": 2, "家樂福": 3}
     unique_media.sort(key=lambda x: order_map.get(x, 99))
     medium_str = "/".join(unique_media)
-     
+      
     tbody = ""
     rows_sorted = sorted(rows, key=lambda x: ({"全家廣播":1,"新鮮視":2,"家樂福":3}.get(x["media"],9), x["seconds"]))
     daily_totals = [0] * eff_days
@@ -267,7 +267,7 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
             else:
                 val = f"${r['pkg_display']:,}" if isinstance(r['pkg_display'], (int, float)) else r['pkg_display']
                 pkg_val_str = f"<td class='right'>{val}</td>"
-             
+              
             # === 修改點：改用中文判斷 ===
             if format_type == "聲活":
                 sec_txt = f"{r['seconds']}秒"
@@ -277,7 +277,7 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
             else:
                 tbody += f"<td>{r['media']}</td><td>{r['region']}</td><td>{r.get('program_num','')}</td><td>{r['daypart']}</td><td>{r['seconds']}</td><td>{rate}</td>{pkg_val_str}"
             # ==========================
-             
+              
             row_spots_sum = 0
             for d_idx, d in enumerate(r['schedule'][:eff_days]):
                 tbody += f"<td>{d}</td>"
@@ -298,7 +298,7 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
     remarks_html = "<br>".join([html_escape(x) for x in remarks])
     vat = int(round(budget * 0.05))
     footer_html = f"<div style='margin-top:10px; font-weight:bold; text-align:right;'>製作費: ${prod:,}<br>5% VAT: ${vat:,}<br>Grand Total: ${grand_total:,}</div>"
-     
+      
     css = """
     body { font-family: sans-serif; font-size: 10px; background-color: #ffffff; color: #000000; padding: 5px; }
     table { border-collapse: collapse; width: 100%; background-color: #ffffff; }
@@ -318,28 +318,28 @@ def generate_html_preview(rows, days_cnt, start_dt, end_dt, c_name, p_display, f
 def load_config_from_cloud(share_url):
     try:
         match = re.search(r"/d/([a-zA-Z0-9-_]+)", share_url)
-        if not match: return None, None, None, None, "連結格式錯誤"
+        if not match: return None, None, None, None, None, "連結格式錯誤"
         file_id = match.group(1)
         def read_sheet(sheet_name):
             url = f"https://docs.google.com/spreadsheets/d/{file_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}"
             return pd.read_csv(url)
-         
+          
         df_store = read_sheet("Stores")
         df_store.columns = [c.strip() for c in df_store.columns]
         store_counts = dict(zip(df_store['Key'], df_store['Display_Name']))
         store_counts_num = dict(zip(df_store['Key'], df_store['Count']))
-         
+          
         df_fact = read_sheet("Factors")
         df_fact.columns = [c.strip() for c in df_fact.columns]
         sec_factors = {}
         for _, row in df_fact.iterrows():
             if row['Media'] not in sec_factors: sec_factors[row['Media']] = {}
             sec_factors[row['Media']][int(row['Seconds'])] = float(row['Factor'])
-         
+          
         name_map = {"全家新鮮視": "新鮮視", "全家廣播": "全家廣播", "家樂福": "家樂福"}
         for k, v in name_map.items():
             if k in sec_factors and v not in sec_factors: sec_factors[v] = sec_factors[k]
-         
+          
         df_price = read_sheet("Pricing")
         df_price.columns = [c.strip() for c in df_price.columns]
         pricing_db = {}
@@ -354,8 +354,19 @@ def load_config_from_cloud(share_url):
             else:
                 if m not in pricing_db: pricing_db[m] = {"Std_Spots": int(row['Std_Spots']), "Day_Part": row['Day_Part']}
                 pricing_db[m][r] = [int(row['List_Price']), int(row['Net_Price'])]
-        return store_counts, store_counts_num, pricing_db, sec_factors, None
-    except Exception as e: return None, None, None, None, f"讀取失敗: {str(e)}"
+        
+        # === 新增：讀取 Sales 分頁 (業務名單) ===
+        df_sales = read_sheet("Sales")
+        df_sales.columns = [c.strip() for c in df_sales.columns]
+        # 假設欄位名稱為 Name，讀取並去除 NaN
+        sales_list = []
+        if "Name" in df_sales.columns:
+            sales_list = df_sales["Name"].dropna().astype(str).tolist()
+            sales_list = [s.strip() for s in sales_list if s.strip()] # 去除空字串
+        # ========================================
+
+        return store_counts, store_counts_num, pricing_db, sec_factors, sales_list, None
+    except Exception as e: return None, None, None, None, None, f"讀取失敗: {str(e)}"
 
 # --- 新增: 運算邏輯面板渲染函式 ---
 def render_logic_panel(logs):
@@ -367,7 +378,7 @@ def render_logic_panel(logs):
         return
 
     st.markdown("### 🧮 運算邏輯詳細面板 (透明化運算)")
-     
+      
     # 將 log 分組顯示
     for idx, item in enumerate(logs):
         title = f"#{idx+1} 【{item['media']}】 {item['seconds']}秒 - {item['region']}"
@@ -378,7 +389,7 @@ def render_logic_panel(logs):
             c2.metric("單檔成本 (Unit Cost)", f"${item['unit_cost_actual']:.2f}")
             c3.metric("秒數係數 (Factor)", f"{item['factor']}")
             c4.metric("最終檔次 (Spots)", item['spots'])
-             
+              
             st.markdown("---")
             # 詳細邏輯區
             st.markdown("#### 1. 基礎參數")
@@ -386,14 +397,14 @@ def render_logic_panel(logs):
             st.text(f"• 實作價 (Net Price): ${item['base_net_price']:,} (依據 Pricing 表)")
             st.text(f"• 標準檔次 (Std Spots): {item['std_spots']} 檔")
             st.text(f"• 秒數: {item['seconds']}秒 (Factor: {item['factor']})")
-             
+              
             st.markdown("#### 2. 單檔成本計算")
             st.latex(r"\text{Unit Cost} = \frac{\text{Net Price}}{\text{Std Spots}} \times \text{Factor}")
             st.code(f"{item['base_net_price']} / {item['std_spots']} * {item['factor']} = {item['unit_cost_actual']:.4f}")
-             
+              
             st.markdown("#### 3. 檔次計算與懲罰判定")
             st.text(f"• 初估檔次 = 預算 / 單檔成本 = {item['budget']:.0f} / {item['unit_cost_actual']:.2f} = {item['spots_init_raw']:.2f}")
-             
+              
             if item['is_under_target']:
                 st.error(f"⚠️ 觸發懲罰機制: 初估檔次 {math.ceil(item['spots_init_raw'])} < 標準檔次 {item['std_spots']}")
                 st.markdown("**懲罰內容：總檔次除以 1.1 (費用不變，檔次變少)**")
@@ -403,7 +414,7 @@ def render_logic_panel(logs):
                 st.success(f"✅ 符合標準: 初估檔次 {math.ceil(item['spots_init_raw'])} >= 標準檔次 {item['std_spots']}")
                 st.markdown("**無懲罰**")
                 st.latex(r"\text{Final Spots} = \text{Ceil}\left(\frac{\text{Budget}}{\text{Unit Cost}}\right)")
-             
+              
             if item.get('note'):
                 st.info(f"備註: {item['note']}")
 
@@ -418,59 +429,59 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
     for m, cfg in config.items():
         # 根據各媒體的預算佔比 (Share) 分配預算
         m_budget_total = total_budget * (cfg["share"] / 100.0)
-         
+          
         for sec, sec_pct in cfg["sec_shares"].items():
             s_budget = m_budget_total * (sec_pct / 100.0)
             if s_budget <= 0: continue
-             
+              
             factor = get_sec_factor(m, sec, sec_factors)
-             
+              
             # --- 邏輯 A: 廣播與新鮮視 ---
             if m in ["全家廣播", "新鮮視"]:
                 db = pricing_db[m]
                 calc_regs = ["全省"] if cfg["is_national"] else cfg["regions"]
                 display_regs = regions_order if cfg["is_national"] else cfg["regions"]
-                 
+                  
                 # 計算單位成本總和 (如果是全省，就是各區單價加總或直接取全省價)
                 # 這裡為了能夠還原 "實作價"，我們需要知道用的是哪個 Base Net
                 # 因為程式邏輯是: unit_net_sum = sum( (Region_Net / Std_Spots) * Factor )
-                 
+                  
                 # 為了 Log 清晰，我們反推 "總實作價 (Net Price Sum)"
                 base_net_price_sum = 0
                 std_spots_ref = db["Std_Spots"] # 4800 or 5040
-                 
+                  
                 # 核心運算
                 unit_net_sum = 0
                 for r in calc_regs:
-                     # 取得該區域(或全省)的實作價
+                      # 取得該區域(或全省)的實作價
                     reg_net = db[r][1] 
                     base_net_price_sum += reg_net
                     # 算出該區域的單檔成本
                     unit_net_sum += (reg_net / std_spots_ref) * factor
-                 
+                  
                 if unit_net_sum == 0: continue
-                 
+                  
                 # 計算檔次 (Spots)
                 spots_init_raw = s_budget / unit_net_sum
                 spots_init = math.ceil(spots_init_raw)
-                 
+                  
                 is_under_target = spots_init < std_spots_ref
                 calc_penalty = 1.1 if is_under_target else 1.0 
-                 
+                  
                 if cfg["is_national"]:
                     row_display_penalty = 1.0
                     total_display_penalty = 1.1 if is_under_target else 1.0
                 else:
                     row_display_penalty = 1.1 if is_under_target else 1.0
                     total_display_penalty = 1.0 
-                 
+                  
                 # 最終檔次計算
                 spots_final_raw = s_budget / (unit_net_sum * calc_penalty)
                 spots_final = math.ceil(spots_final_raw)
-                 
+                  
                 if spots_final % 2 != 0: spots_final += 1
                 if spots_final == 0: spots_final = 2
-                 
+                  
                 # --- [新增] 記錄運算邏輯 ---
                 logs.append({
                     "media": m,
@@ -491,7 +502,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 
                 # 計算每日分配
                 sch = calculate_schedule(spots_final, days_count)
-                 
+                  
                 # 計算全省打包價與單一區域價
                 nat_pkg_display = 0
                 if cfg["is_national"]:
@@ -499,14 +510,14 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                     nat_unit_price = int((nat_list / db["Std_Spots"]) * factor * total_display_penalty)
                     nat_pkg_display = nat_unit_price * spots_final
                     total_list_accum += nat_pkg_display
-                 
+                  
                 for i, r in enumerate(display_regs):
                     list_price_region = db[r][0]
                     unit_rate_display = int((list_price_region / db["Std_Spots"]) * factor * row_display_penalty)
                     total_rate_display = unit_rate_display * spots_final
                     row_pkg_display = total_rate_display
                     if not cfg["is_national"]: total_list_accum += row_pkg_display
-                     
+                      
                     rows.append({
                         "media": m, "region": r, "program_num": store_counts_num.get(f"新鮮視_{r}" if m=="新鮮視" else r, 0),
                         "daypart": db["Day_Part"], "seconds": sec, "spots": spots_final, "schedule": sch,
@@ -519,21 +530,21 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                 db = pricing_db["家樂福"]
                 base_std = db["量販_全省"]["Std_Spots"]
                 base_net_price = db["量販_全省"]["Net"]
-                 
+                  
                 # 核心運算
                 unit_net = (base_net_price / base_std) * factor
-                 
+                  
                 spots_init_raw = s_budget / unit_net
                 spots_init = math.ceil(spots_init_raw)
-                 
+                  
                 is_under_target = spots_init < base_std
                 penalty = 1.1 if is_under_target else 1.0
-                 
+                  
                 spots_final_raw = s_budget / (unit_net * penalty)
                 spots_final = math.ceil(spots_final_raw)
-                 
+                  
                 if spots_final % 2 != 0: spots_final += 1
-                 
+                  
                 # --- [新增] 記錄運算邏輯 ---
                 logs.append({
                     "media": m,
@@ -557,13 +568,13 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                 unit_rate_h = int((base_list / base_std) * factor * penalty)
                 total_rate_h = unit_rate_h * spots_final
                 total_list_accum += total_rate_h
-                 
+                  
                 rows.append({
                     "media": m, "region": "全省量販", "program_num": store_counts_num["家樂福_量販"],
                     "daypart": db["量販_全省"]["Day_Part"], "seconds": sec, "spots": spots_final, "schedule": sch_h,
                     "rate_display": total_rate_h, "pkg_display": total_rate_h, "is_pkg_member": False
                 })
-                 
+                  
                 # 家樂福超市的檔次是依照量販比例計算
                 spots_s = int(spots_final * (db["超市_全省"]["Std_Spots"] / base_std))
                 sch_s = calculate_schedule(spots_s, days_count)
@@ -572,7 +583,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                     "daypart": db["超市_全省"]["Day_Part"], "seconds": sec, "spots": spots_s, "schedule": sch_s,
                     "rate_display": "計量販", "pkg_display": "計量販", "is_pkg_member": False
                 })
-                 
+                  
     return rows, total_list_accum, logs
 
 # =========================================================
@@ -581,7 +592,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
 
 @st.cache_data(show_spinner="正在生成 Excel 報表...", ttl=3600)
 def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, product_name, rows, remarks_list, final_budget_val, prod_cost, sales_person):
-     
+      
     # Common Excel Styles
     SIDE_THIN, SIDE_MEDIUM, SIDE_HAIR = Side(style=BS_THIN), Side(style=BS_MEDIUM), Side(style=BS_HAIR)
     SIDE_DOUBLE = Side(style='double')
@@ -592,7 +603,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     ALIGN_RIGHT = Alignment(horizontal='right', vertical='center', wrap_text=True)
     FONT_STD, FONT_BOLD, FONT_TITLE = Font(name=FONT_MAIN, size=12), Font(name=FONT_MAIN, size=14, bold=True), Font(name=FONT_MAIN, size=48, bold=True)
     FILL_WEEKEND = PatternFill(start_color="FFFFCC", end_color="FFFFCC", fill_type="solid")
-     
+      
     def set_border(cell, top=None, bottom=None, left=None, right=None):
         cur = cell.border
         new_top = Side(style=top) if top else cur.top
@@ -619,7 +630,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 
         COL_WIDTHS = {'A': 19.6, 'B': 22.8, 'C': 14.6, 'D': 20.0, 'E': 13.0, 'F': 19.6, 'G': 17.9}
         ROW_HEIGHTS = {1: 61.0, 2: 29.0, 3: 40.0, 4: 40.0, 5: 40.0, 6: 40.0, 7: 40.0, 8: 40.0}
-         
+          
         for k, v in COL_WIDTHS.items(): ws.column_dimensions[k].width = v
         for i in range(eff_days): ws.column_dimensions[get_column_letter(8+i)].width = 8.5
         ws.column_dimensions[get_column_letter(spots_col_idx)].width = 13.0
@@ -630,15 +641,15 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         p_str = f"{'、'.join([f'{s}秒' for s in unique_secs])} {product_name}"
         unique_media = sorted(list(set([r['media'] for r in rows])))
         medium_str = "/".join(unique_media)
-         
+          
         infos = [("A3", "客戶名稱：", client_name), ("A4", "Product：", p_str), ("A5", "Period :", f"{start_dt.strftime('%Y. %m. %d')} - {end_dt.strftime('%Y. %m. %d')}"), ("A6", "Medium :", medium_str)]
         for pos, lbl, val in infos:
             c = ws[pos]; c.value = lbl; c.font = FONT_BOLD; c.alignment = Alignment(vertical='center')
             c2 = ws.cell(c.row, 2); c2.value = val; c2.font = FONT_BOLD; c2.alignment = Alignment(vertical='center')
-         
+          
         for c_idx in range(1, total_cols + 1): set_border(ws.cell(3, c_idx), top=BS_MEDIUM)
         ws['H6'] = f"{start_dt.month}月"; ws['H6'].font = Font(name=FONT_MAIN, size=16, bold=True); ws['H6'].alignment = ALIGN_CENTER
-         
+          
         headers = [("A","Station"), ("B","Location"), ("C","Program"), ("D","Day-part"), ("E","Size"), ("F","rate\n(Net)"), ("G","Package-cost\n(Net)")]
         for col, txt in headers:
             col_idx = column_index_from_string(col)
@@ -729,7 +740,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if label == "Grand Total":
                 for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), top=BS_MEDIUM, bottom=BS_MEDIUM)
             curr_row += 1
-         
+          
         draw_outer_border_fast(ws, 7, curr_row-1, 1, total_cols); curr_row += 1
         ws.cell(curr_row, 1, "Remarks:").font = Font(name=FONT_MAIN, size=16, bold=True, underline='single')
         for rm in remarks_list:
@@ -741,7 +752,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.merge_cells(start_row=sig_start, start_column=1, end_row=sig_start, end_column=7); ws.cell(sig_start, 1, "甲    方：東吳廣告股份有限公司").alignment = ALIGN_LEFT
         ws.merge_cells(start_row=sig_start+1, start_column=1, end_row=sig_start+1, end_column=7); ws.cell(sig_start+1, 1, "統一編號：20935458").alignment = ALIGN_LEFT
         ws.merge_cells(start_row=sig_start+2, start_column=1, end_row=sig_start+2, end_column=7); ws.cell(sig_start+2, 1, sales_person).alignment = ALIGN_LEFT; ws.cell(sig_start+2, 1).font = FONT_STD
-         
+          
         right_start_col = 20 # Column T
         ws.merge_cells(start_row=sig_start, start_column=right_start_col, end_row=sig_start, end_column=right_start_col+7); ws.cell(sig_start, right_start_col, f"乙    方：{client_name}").alignment = ALIGN_LEFT
         ws.merge_cells(start_row=sig_start+1, start_column=right_start_col, end_row=sig_start+1, end_column=right_start_col+7); ws.cell(sig_start+1, right_start_col, "統一編號：").alignment = ALIGN_LEFT
@@ -763,12 +774,12 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5; ws.column_dimensions[get_column_letter(end_c_start+1)].width = 58.0; ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0 
         ROW_H_MAP = {1:30, 2:30, 3:46, 4:46, 5:40, 6:40, 7:35, 8:35}; 
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
-         
+          
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']; c1.value = "聲活數位-媒體計劃排程表"; c1.font = Font(name=FONT_MAIN, size=24, bold=True); c1.alignment = ALIGN_CENTER
         ws.merge_cells(f"A2:{get_column_letter(total_cols)}2"); c2 = ws['A2']; c2.value = "Media Schedule"; c2.font = Font(name=FONT_MAIN, size=18, bold=True); c2.alignment = ALIGN_CENTER
         FONT_16 = Font(name=FONT_MAIN, size=16); ws.merge_cells(f"A3:{get_column_letter(total_cols)}3"); ws['A3'].value = "聲活數位科技股份有限公司 統編 28710100"; ws['A3'].font = FONT_16; ws['A3'].alignment = ALIGN_LEFT
         ws.merge_cells(f"A4:{get_column_letter(total_cols)}4"); ws['A4'].value = sales_person; ws['A4'].font = FONT_16; ws['A4'].alignment = ALIGN_LEFT
-         
+          
         unique_secs = sorted(list(set([r['seconds'] for r in rows]))); sec_str = " ".join([f"{s}秒廣告" for s in unique_secs]); period_str = f"執行期間：{start_dt.strftime('%Y.%m.%d')} - {end_dt.strftime('%Y.%m.%d')}"
         FONT_14 = Font(name=FONT_MAIN, size=14); c5a = ws['A5']; c5a.value = "客戶名稱："; c5a.font = FONT_14; c5a.alignment = ALIGN_LEFT
         ws.merge_cells("B5:E5"); c5b = ws['B5']; c5b.value = client_name; c5b.font = FONT_14; c5b.alignment = ALIGN_LEFT
@@ -792,7 +803,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if c_idx == 6: l = None 
             c.border = Border(top=Side(style=t), bottom=Side(style=b), left=Side(style=l) if l else None, right=Side(style=r) if r else None)
         draw_outer_border_fast(ws, 6, 6, 1, 5); ws.cell(6, 5).border = Border(top=Side(style=BS_MEDIUM), bottom=Side(style=BS_MEDIUM), right=Side(style=None))
-         
+          
         header_start_row = 7; headers = ["頻道", "播出地區", "播出店數", "播出時間", "秒數\n規格"]
         for i, h in enumerate(headers):
             c_idx = i + 1; ws.merge_cells(start_row=header_start_row, start_column=c_idx, end_row=header_start_row+1, end_column=c_idx); c = ws.cell(header_start_row, c_idx); c.value = h; c.font = FONT_BOLD; c.alignment = ALIGN_CENTER
@@ -878,7 +889,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if lbl == "Grand Total":
                 for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
             curr_row += 1
-         
+          
         curr_row += 1; start_footer = curr_row; r_col_start = 6 
         ws.row_dimensions[start_footer].height = 25; ws.cell(start_footer, r_col_start).value = "Remarks："
         ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
@@ -912,7 +923,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
         ws.column_dimensions[get_column_letter(end_c_start)].width = 9.5; ws.column_dimensions[get_column_letter(end_c_start+1)].width = 36.0; ws.column_dimensions[get_column_letter(end_c_start+2)].width = 20.0
         ROW_H_MAP = {1:70, 2:33.5, 3:33.5, 4:46, 5:40, 6:35, 7:35}
         for r, h in ROW_H_MAP.items(): ws.row_dimensions[r].height = h
-         
+          
         ws.merge_cells(f"A1:{get_column_letter(total_cols)}1"); c1 = ws['A1']; c1.value = "鉑霖行動行銷-媒體計劃排程表 Mobi Media Schedule"; c1.font = Font(name=FONT_MAIN, size=28, bold=True); c1.alignment = ALIGN_LEFT 
         if logo_bytes:
             try: img = OpenpyxlImage(io.BytesIO(logo_bytes)); scale = 125 / img.height; img.height = 125; img.width = int(img.width * scale); col_letter = get_column_letter(total_cols - 1); img.anchor = f"{col_letter}1"; ws.add_image(img)
@@ -1028,7 +1039,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
             if lbl == "Grand Total":
                 for c_idx in range(1, total_cols + 1): set_border(ws.cell(curr_row, c_idx), bottom=BS_MEDIUM)
             curr_row += 1
-         
+          
         curr_row += 1; start_footer = curr_row; r_col_start = 6 
         ws.row_dimensions[start_footer].height = 25; ws.cell(start_footer, r_col_start).value = "Remarks："
         ws.cell(start_footer, r_col_start).font = Font(name=FONT_MAIN, size=16, bold=True)
@@ -1057,7 +1068,7 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.fitToPage = True
-     
+      
     # === 修改點：改用中文判斷 ===
     if format_type == "東吳":
         render_dongwu_optimized(ws, start_dt, end_dt, rows, final_budget_val, prod_cost)
@@ -1078,12 +1089,12 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 def main():
     try:
         with st.spinner("正在讀取 Google 試算表設定檔..."):
-            STORE_COUNTS, STORE_COUNTS_NUM, PRICING_DB, SEC_FACTORS, err_msg = load_config_from_cloud(GSHEET_SHARE_URL)
-         
+            STORE_COUNTS, STORE_COUNTS_NUM, PRICING_DB, SEC_FACTORS, SALES_LIST, err_msg = load_config_from_cloud(GSHEET_SHARE_URL)
+          
         if err_msg:
             st.error(f"❌ 設定檔載入失敗: {err_msg}")
             st.stop()
-         
+          
         # --- Sidebar 邏輯 (登入與設定) ---
         with st.sidebar:
             st.header("🕵️ 主管登入")
@@ -1103,13 +1114,13 @@ def main():
              
             st.markdown("---")
             st.subheader("☁️ Ragic 連線設定")
-             
+              
             if st.session_state.is_supervisor:
                 st.session_state.ragic_url = st.text_input("Ragic 表單網址", value=st.session_state.ragic_url)
                 st.session_state.ragic_key = st.text_input("Ragic API Key", value=st.session_state.ragic_key, type="password")
             else:
                 st.text_input("Ragic 表單網址", value=st.session_state.ragic_url, disabled=True)
-             
+              
             st.markdown("---")
             if st.button("🧹 清除快取"):
                 st.cache_data.clear()
@@ -1126,7 +1137,7 @@ def main():
         with c2: product_name = st.text_input("產品名稱", "統一布丁")
         with c3: total_budget_input = st.number_input("總預算 (未稅 Net)", value=1000000, step=10000)
         with c4: prod_cost_input = st.number_input("製作費 (未稅)", value=0, step=1000)
-        with c5_sales: sales_person = st.text_input("業務名稱", "")
+        with c5_sales: sales_person = st.selectbox("業務名稱", SALES_LIST)
 
         # 處理主管覆寫預算功能
         final_budget_val = total_budget_input
@@ -1155,7 +1166,7 @@ def main():
 
         st.markdown("### 3. 媒體投放設定")
         col_cb1, col_cb2, col_cb3 = st.columns(3)
-         
+          
         def on_media_change():
             """媒體勾選變更時的自動配比邏輯"""
             active = []
@@ -1198,14 +1209,14 @@ def main():
             key_changed = f"{media_prefix}{changed_sec}"
             new_val = st.session_state[key_changed]
             rem = 100 - new_val
-             
+              
             others = [s for s in all_secs if s != changed_sec]
             if not others:
                 st.session_state[key_changed] = 100
                 return
 
             current_sum_others = sum([st.session_state[f"{media_prefix}{s}"] for s in others])
-             
+              
             for i, s in enumerate(others):
                 other_key = f"{media_prefix}{s}"
                 if current_sum_others == 0:
@@ -1218,7 +1229,7 @@ def main():
                     if i == len(others) - 1:
                         allocated = new_val + sum([st.session_state[f"{media_prefix}{x}"] for x in others if x != s])
                         new_other_val = 100 - allocated
-                 
+                  
                 st.session_state[other_key] = max(0, new_other_val)
 
         is_rad = col_cb1.checkbox("全家廣播", key="cb_rad", on_change=on_media_change)
@@ -1227,7 +1238,7 @@ def main():
 
         m1, m2, m3 = st.columns(3)
         config = {}
-         
+          
         # --- 媒體參數設定 UI 區塊 ---
         if is_rad:
             with m1:
@@ -1238,10 +1249,10 @@ def main():
                     is_nat = True
                     regs = ["全省"]
                     st.info("✅ 已選滿6區，自動轉為全省聯播")
-                 
+                  
                 secs = st.multiselect("秒數", DURATIONS, [20], key="rad_sec")
                 st.slider("預算 %", 0, 100, key="rad_share", on_change=on_slider_change, args=("rad_share",))
-                 
+                  
                 sorted_secs = sorted(secs)
                 if sorted_secs:
                     keys_to_check = [f"rs_{s}" for s in sorted_secs]
@@ -1253,7 +1264,7 @@ def main():
                                 st.session_state[k] = 100 - (default_val * (len(sorted_secs)-1))
                             else:
                                 st.session_state[k] = default_val
-                     
+                      
                     sec_shares = {}
                     for s in sorted_secs:
                         st.slider(
@@ -1263,7 +1274,7 @@ def main():
                             args=("rs_", s, sorted_secs)
                         )
                         sec_shares[s] = st.session_state[f"rs_{s}"]
-                     
+                      
                     config["全家廣播"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.rad_share}
 
         if is_fv:
@@ -1275,10 +1286,10 @@ def main():
                     is_nat = True
                     regs = ["全省"]
                     st.info("✅ 已選滿6區，自動轉為全省聯播")
-                 
+                  
                 secs = st.multiselect("秒數", DURATIONS, [10], key="fv_sec")
                 st.slider("預算 %", 0, 100, key="fv_share", on_change=on_slider_change, args=("fv_share",))
-                 
+                  
                 sorted_secs = sorted(secs)
                 if sorted_secs:
                     keys_to_check = [f"fs_{s}" for s in sorted_secs]
@@ -1290,7 +1301,7 @@ def main():
                                 st.session_state[k] = 100 - (default_val * (len(sorted_secs)-1))
                             else:
                                 st.session_state[k] = default_val
-                     
+                      
                     sec_shares = {}
                     for s in sorted_secs:
                         st.slider(
@@ -1300,7 +1311,7 @@ def main():
                             args=("fs_", s, sorted_secs)
                         )
                         sec_shares[s] = st.session_state[f"fs_{s}"]
-                     
+                      
                     config["新鮮視"] = {"is_national": is_nat, "regions": regs, "sec_shares": sec_shares, "share": st.session_state.fv_share}
 
         if is_cf:
@@ -1308,7 +1319,7 @@ def main():
                 st.markdown("#### 🛒 家樂福")
                 secs = st.multiselect("秒數", DURATIONS, [20], key="cf_sec")
                 st.slider("預算 %", 0, 100, key="cf_share", on_change=on_slider_change, args=("cf_share",))
-                 
+                  
                 sorted_secs = sorted(secs)
                 if sorted_secs:
                     keys_to_check = [f"cs_{s}" for s in sorted_secs]
@@ -1320,7 +1331,7 @@ def main():
                                 st.session_state[k] = 100 - (default_val * (len(sorted_secs)-1))
                             else:
                                 st.session_state[k] = default_val
-                     
+                      
                     sec_shares = {}
                     for s in sorted_secs:
                         st.slider(
@@ -1330,7 +1341,7 @@ def main():
                             args=("cs_", s, sorted_secs)
                         )
                         sec_shares[s] = st.session_state[f"cs_{s}"]
-                 
+                  
                     config["家樂福"] = {"regions": ["全省"], "sec_shares": sec_shares, "share": st.session_state.cf_share}
 
         # --- 運算與輸出邏輯 ---
@@ -1339,24 +1350,24 @@ def main():
             prod_cost = prod_cost_input 
             vat = int(round(final_budget_val * 0.05))
             grand_total = final_budget_val + vat
-             
+              
             p_str = f"{'、'.join([f'{s}秒' for s in sorted(list(set(r['seconds'] for r in rows)))])} {product_name}"
             rem = get_remarks_text(sign_deadline, billing_month, payment_date)
-             
+              
             html_preview = generate_html_preview(rows, days_count, start_date, end_date, client_name, p_str, format_type, rem, total_list_accum, grand_total, final_budget_val, prod_cost)
             st.components.v1.html(html_preview, height=700, scrolling=True)
-             
+              
             # ========== [新增] 插入運算邏輯面板 ==========
             render_logic_panel(logs)
             # ===========================================
-             
+              
             st.markdown("---")
             st.subheader("📥 檔案下載區")
-             
+              
             xlsx_temp = generate_excel_from_scratch(format_type, start_date, end_date, client_name, product_name, rows, rem, final_budget_val, prod_cost, sales_person)
-             
+              
             col_dl1, col_dl2, col_ragic = st.columns([1, 1, 2])
-             
+              
             with col_dl2:
                 pdf_bytes, method, err = xlsx_bytes_to_pdf_bytes(xlsx_temp)
                 if pdf_bytes:
@@ -1384,7 +1395,7 @@ def main():
 
             with col_ragic:
                 st.markdown("#### ☁️ 上傳至 Ragic")
-                 
+                  
                 if not st.session_state.ragic_confirm_state:
                     if st.button("🚀 上傳資料至 Ragic", type="primary"):
                         st.session_state.ragic_confirm_state = True
@@ -1392,7 +1403,7 @@ def main():
                 else:
                     st.warning(f"即將上傳【{client_name} - {product_name}】至 Ragic，請確認？")
                     c_conf1, c_conf2 = st.columns(2)
-                     
+                      
                     with c_conf1:
                         if st.button("❌ 取消"):
                             st.session_state.ragic_confirm_state = False
@@ -1401,7 +1412,7 @@ def main():
                     with c_conf2:
                         if st.button("✅ 確認上傳"):
                             with st.spinner("正在上傳資料與檔案..."):
-                                 
+                                  
                                 # Ragic 欄位對照表 (請勿隨意修改 ID)
                                 RAGIC_MAP = {
                                     'client':     '1000080',  # 客戶名稱
@@ -1445,7 +1456,7 @@ def main():
                                     xlsx_temp, 
                                     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
                                 )
-                                 
+                                  
                                 if pdf_bytes:
                                     files_payload[RAGIC_MAP['file_pdf']] = (
                                         f"Cue_{safe_filename(client_name)}.pdf", 
@@ -1459,7 +1470,7 @@ def main():
                                     data_payload,
                                     files_payload
                                 )
-                                 
+                                  
                                 if success:
                                     st.success(msg)
                                     time.sleep(3)
