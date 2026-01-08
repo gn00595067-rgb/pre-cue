@@ -26,7 +26,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 # =========================================================
 st.set_page_config(
     layout="wide",
-    page_title="Cue Sheet Pro v112.5 (Logic Panel Added)"
+    page_title="Cue Sheet Pro v112.6 (Sales Alias Added)"
 )
 
 # =============================================================================
@@ -355,17 +355,18 @@ def load_config_from_cloud(share_url):
                 if m not in pricing_db: pricing_db[m] = {"Std_Spots": int(row['Std_Spots']), "Day_Part": row['Day_Part']}
                 pricing_db[m][r] = [int(row['List_Price']), int(row['Net_Price'])]
         
-        # === 新增：讀取 Sales 分頁 (業務名單) ===
+        # === 新增：讀取 Sales 分頁 (真名 vs 綽號) ===
         df_sales = read_sheet("Sales")
         df_sales.columns = [c.strip() for c in df_sales.columns]
-        # 假設欄位名稱為 Name，讀取並去除 NaN
-        sales_list = []
-        if "Name" in df_sales.columns:
-            sales_list = df_sales["Name"].dropna().astype(str).tolist()
-            sales_list = [s.strip() for s in sales_list if s.strip()] # 去除空字串
-        # ========================================
+        # 假設欄位為 Name (真名) 和 Nickname (Ragic用)，建立對照表
+        # 如果 Google Sheet 欄位名不同，請修正這裡
+        if 'Name' in df_sales.columns and 'Nickname' in df_sales.columns:
+            sales_map = dict(zip(df_sales['Name'], df_sales['Nickname']))
+        else:
+            # 若欄位沒設對，做個防呆，Key=Name, Value=Name (都用真名)
+            sales_map = {name: name for name in df_sales.iloc[:, 0].tolist()}
 
-        return store_counts, store_counts_num, pricing_db, sec_factors, sales_list, None
+        return store_counts, store_counts_num, pricing_db, sec_factors, sales_map, None
     except Exception as e: return None, None, None, None, None, f"讀取失敗: {str(e)}"
 
 # --- 新增: 運算邏輯面板渲染函式 ---
@@ -524,7 +525,7 @@ def calculate_plan_data(config, total_budget, days_count, pricing_db, sec_factor
                         "rate_display": total_rate_display, "pkg_display": row_pkg_display,
                         "is_pkg_member": cfg["is_national"], "nat_pkg_display": nat_pkg_display
                     })
-             
+              
             # --- 邏輯 B: 家樂福 ---
             elif m == "家樂福":
                 db = pricing_db["家樂福"]
@@ -1089,7 +1090,8 @@ def generate_excel_from_scratch(format_type, start_dt, end_dt, client_name, prod
 def main():
     try:
         with st.spinner("正在讀取 Google 試算表設定檔..."):
-            STORE_COUNTS, STORE_COUNTS_NUM, PRICING_DB, SEC_FACTORS, SALES_LIST, err_msg = load_config_from_cloud(GSHEET_SHARE_URL)
+            # === 修改點：解包新增的 SALES_MAP ===
+            STORE_COUNTS, STORE_COUNTS_NUM, PRICING_DB, SEC_FACTORS, SALES_MAP, err_msg = load_config_from_cloud(GSHEET_SHARE_URL)
           
         if err_msg:
             st.error(f"❌ 設定檔載入失敗: {err_msg}")
@@ -1111,7 +1113,7 @@ def main():
                 if st.button("登出"):
                     st.session_state.is_supervisor = False
                     st.rerun()
-             
+              
             st.markdown("---")
             st.subheader("☁️ Ragic 連線設定")
               
@@ -1127,7 +1129,7 @@ def main():
                 st.rerun()
 
         # --- Main Content 邏輯 (輸入與報表) ---
-        st.title("📺 媒體 Cue 表生成器 (v112.5 Fixed Auth)")
+        st.title("📺 媒體 Cue 表生成器 (v112.6 Sales Alias)")
         # === 修改點：顯示選項改為中文 ===
         format_type = st.radio("選擇格式", ["東吳", "聲活", "鉑霖"], horizontal=True)
         # ==============================
@@ -1137,7 +1139,13 @@ def main():
         with c2: product_name = st.text_input("產品名稱", "統一布丁")
         with c3: total_budget_input = st.number_input("總預算 (未稅 Net)", value=1000000, step=10000)
         with c4: prod_cost_input = st.number_input("製作費 (未稅)", value=0, step=1000)
-        with c5_sales: sales_person = st.selectbox("業務名稱", SALES_LIST)
+        
+        # === 修改點：業務名稱改為下拉選單 ===
+        with c5_sales: 
+            # 取得 Sales Map 的所有 Key (真名) 作為選項
+            sales_options = list(SALES_MAP.keys()) if SALES_MAP else []
+            sales_person = st.selectbox("業務名稱", options=sales_options)
+        # ================================
 
         # 處理主管覆寫預算功能
         final_budget_val = total_budget_input
@@ -1433,6 +1441,10 @@ def main():
                                 }
 
                                 campaign_summary = format_campaign_details(config)
+                                
+                                # === 修改點：取得對應的綽號 (若無則用真名) ===
+                                sales_nickname = SALES_MAP.get(sales_person, sales_person)
+                                # ========================================
 
                                 data_payload = {
                                     RAGIC_MAP['client']:     client_name,
@@ -1441,7 +1453,7 @@ def main():
                                     RAGIC_MAP['budget_fin']: final_budget_val,
                                     RAGIC_MAP['prod_cost']:  prod_cost_input,
                                     RAGIC_MAP['format']:     format_type,
-                                    RAGIC_MAP['sales']:      sales_person,
+                                    RAGIC_MAP['sales']:      sales_nickname,  # 這裡上傳綽號
                                     RAGIC_MAP['date_start']: str(start_date),
                                     RAGIC_MAP['date_end']:   str(end_date),
                                     RAGIC_MAP['date_sign']:  str(sign_deadline),
